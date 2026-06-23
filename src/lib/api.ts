@@ -2,6 +2,8 @@ import type {
   AuthToken,
   Block,
   Business,
+  EndpointVerifyResult,
+  IntentResolution,
   RegistrySearchResult,
   SearchResult,
   User,
@@ -114,6 +116,40 @@ export const businessApi = {
     request(`/businesses/${id}/publish`, { method: "POST" }, token),
 
   agentPreview: (id: string): Promise<unknown> => request(`/businesses/${id}/preview`),
+
+  setPrivacy: (id: string, isPublic: boolean, token: string): Promise<Business> =>
+    request(`/businesses/${id}`, { method: "PATCH", body: JSON.stringify({ is_public: isPublic }) }, token),
+
+  setAgentEndpoint: (id: string, endpoint: string, token: string): Promise<Business> =>
+    request(`/businesses/${id}`, { method: "PATCH", body: JSON.stringify({ agent_endpoint: endpoint }) }, token),
+};
+
+// Endpoint Verification
+export const endpointApi = {
+  verify: (
+    endpointUrl: string,
+    entityId?: string
+  ): Promise<EndpointVerifyResult> =>
+    request("/verify-endpoint", {
+      method: "POST",
+      body: JSON.stringify({ endpoint_url: endpointUrl, entity_id: entityId }),
+    }),
+};
+
+// Intent Resolution
+export const intentApi = {
+  resolve: (
+    query: string,
+    options?: {
+      entity_type?: string;
+      verified_only?: boolean;
+      has_agent_endpoint?: boolean;
+    }
+  ): Promise<{ query: string; results: IntentResolution[] }> =>
+    request("/resolve-intent", {
+      method: "POST",
+      body: JSON.stringify({ query, ...options }),
+    }),
 };
 
 // Media

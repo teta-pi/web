@@ -25,6 +25,9 @@ export const SEED_BUSINESSES: Omit<
       status: "active",
       verified_at: "2026-06-01T00:00:00Z",
     },
+    entity_type: "business" as const,
+    agent_endpoint: null,
+    agent_endpoint_verified: false,
     ai_categories: { industry: "logistics", confidence: 0.95 },
     description:
       "Autonomous freight coordination and cross-border customs attestation for agent-managed supply chains.",
@@ -49,6 +52,9 @@ export const SEED_BUSINESSES: Omit<
       status: "active",
       verified_at: "2026-06-01T00:00:00Z",
     },
+    entity_type: "business" as const,
+    agent_endpoint: null,
+    agent_endpoint_verified: false,
     ai_categories: { industry: "healthcare", confidence: 0.92 },
     description:
       "Clinical data exchange with patient-consent verification and signed provenance for diagnostic media.",
@@ -73,6 +79,9 @@ export const SEED_BUSINESSES: Omit<
       status: "active",
       verified_at: "2026-06-01T00:00:00Z",
     },
+    entity_type: "business" as const,
+    agent_endpoint: null,
+    agent_endpoint_verified: false,
     ai_categories: { industry: "media", confidence: 0.91 },
     description:
       "C2PA-signed media production and content authenticity pipelines for brand-safe agent distribution.",
@@ -97,6 +106,9 @@ export const SEED_BUSINESSES: Omit<
       status: "active",
       verified_at: "2026-06-01T00:00:00Z",
     },
+    entity_type: "business" as const,
+    agent_endpoint: null,
+    agent_endpoint_verified: false,
     ai_categories: { industry: "finance", confidence: 0.88 },
     description:
       "Programmatic credit underwriting and timestamped disclosure records for SMB lending agents.",
@@ -121,6 +133,9 @@ export const SEED_BUSINESSES: Omit<
       status: "active",
       verified_at: "2026-06-01T00:00:00Z",
     },
+    entity_type: "business" as const,
+    agent_endpoint: null,
+    agent_endpoint_verified: false,
     ai_categories: { industry: "maritime", confidence: 0.93 },
     description:
       "Vessel tracking and cargo manifest attestation with verifiable bills of lading.",
@@ -145,6 +160,9 @@ export const SEED_BUSINESSES: Omit<
       status: "active",
       verified_at: "2026-06-01T00:00:00Z",
     },
+    entity_type: "business" as const,
+    agent_endpoint: null,
+    agent_endpoint_verified: false,
     ai_categories: { industry: "energy", confidence: 0.87 },
     description:
       "Real-time grid balancing and renewable certificate trading. Registry standing confirmed.",
@@ -169,6 +187,9 @@ export const SEED_BUSINESSES: Omit<
       status: "active",
       verified_at: "2026-06-01T00:00:00Z",
     },
+    entity_type: "business" as const,
+    agent_endpoint: null,
+    agent_endpoint_verified: false,
     ai_categories: { industry: "manufacturing", confidence: 0.89 },
     description:
       "Precision component manufacturing with ISO-attested process documentation.",
