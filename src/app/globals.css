@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --violet: #6B3FA0;
+  --orange: #E8640C;
+  --text-primary: #1A1035;
+  --text-authority: #3A2C5C;
+  --text-secondary: #6B6080;
+  --text-muted: #9991AC;
+  --text-dot: #D8D2E2;
+  --level-full: #6B3FA0;
+  --level-partial: #E8640C;
+  --level-registry: #B8B2C8;
+  --hairline: rgba(26, 16, 53, 0.10);
+  --hairline-strong: rgba(26, 16, 53, 0.12);
+  --frosted-bg: rgba(107, 63, 160, 0.025);
+  --hover-bg: rgba(107, 63, 160, 0.035);
+  --selection: rgba(107, 63, 160, 0.16);
+}
+
+html, body {
+  background: #ffffff;
+  color: #1A1035;
+  font-family: 'Trebuchet MS', 'Segoe UI', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+.frosted {
+  background: var(--frosted-bg);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 13px;
+  backdrop-filter: blur(8px);
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid rgba(26, 16, 53, 0.10);
+  border-radius: 20px;
+  background: rgba(107, 63, 160, 0.04);
+  font-size: 12.5px;
+  color: #3A2C5C;
+}
+
+.iso-chip {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border: 1px solid rgba(26, 16, 53, 0.14);
+  border-radius: 4px;
+  color: #6B3FA0;
+  letter-spacing: 0.5px;
+}
+
+.level-border-full {
+  border-left: 3px solid #6B3FA0;
+  border-radius: 0 13px 13px 0;
+}
+
+.level-border-partial {
+  border-left: 3px solid #E8640C;
+  border-radius: 0 13px 13px 0;
+}
+
+.level-border-registry {
+  border-left: 3px solid #B8B2C8;
+  border-radius: 0 13px 13px 0;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
