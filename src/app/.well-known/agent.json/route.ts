@@ -5,9 +5,10 @@ export async function GET() {
     {
       name: "TETA+PI Verification Protocol",
       version: "1.0",
-      description: "Trust infrastructure for the agent economy — open verification of businesses, people, and organizations via official registries, C2PA-signed media, and Bitcoin OpenTimestamps.",
-      mcp_endpoint: "https://tetapi.io/mcp",
-      api_endpoint: "https://tetapi.io/api/v1",
+      description:
+        "Trust infrastructure for the agent economy — universal verification of businesses, journalists, artists, and organizations via official registries, C2PA-signed media, and Bitcoin OpenTimestamps.",
+      mcp_endpoint: "https://mcp.tetapi.dev",
+      api_endpoint: "https://api.tetapi.dev/api/v1",
       capabilities: [
         "entity_verification",
         "endpoint_verification",
@@ -16,22 +17,23 @@ export async function GET() {
         "bitcoin_timestamping",
       ],
       entity_types: ["business", "person", "organization"],
-      verification_levels: [
-        "registry_attested",
-        "c2pa_verified",
-        "btc_confirmed",
-      ],
+      verification_levels: ["registry_attested", "c2pa_verified", "btc_confirmed"],
       mcp_tools: [
-        "search_entities",
-        "get_business_profile",
-        "verify_business_claim",
-        "get_verification_proof",
-        "verify_endpoint",
-        "search_verified_businesses",
+        "teta_search",
+        "teta_verify_entity",
+        "teta_verify_claim",
+        "teta_get_proof",
+        "teta_verify_endpoint",
       ],
-      registries: ["Ukraine EDR", "Germany Handelsregister", "UK Companies House", "Singapore ACRA"],
-      contact: "protocol@tetapi.io",
-      spec: "https://tetapi.io/protocol/v1",
+      registries: [
+        "GLEIF (global)",
+        "SEC EDGAR (US)",
+        "Ukraine EDR",
+        "Germany Handelsregister",
+        "UK Companies House",
+      ],
+      contact: "protocol@tetapi.dev",
+      spec: "https://tetapi.dev/protocol/v1",
     },
     {
       headers: {
