@@ -17,6 +17,7 @@ import { IsoChip } from "@/components/ui/IsoChip";
 import {
   useOnboardingStore,
   type RegistryEntity,
+  type EntityKind,
 } from "@/stores/useOnboardingStore";
 import { searchApi } from "@/lib/api";
 
@@ -196,6 +197,38 @@ export default function ClaimPage() {
 
   // ===== Step 0: Entry Hero =====
   if (store.step === 0) {
+    const kinds: Array<{
+      kind: EntityKind;
+      label: string;
+      sub: string;
+      detail: string;
+    }> = [
+      {
+        kind: "business",
+        label: "Business",
+        sub: "Company · Startup · Brand",
+        detail: "Be found by AI agents searching for verified suppliers, partners, and services.",
+      },
+      {
+        kind: "journalist",
+        label: "Journalist / Media",
+        sub: "Reporter · Editor · Publication",
+        detail: "Prove your identity and content are real — let agents cite you with confidence.",
+      },
+      {
+        kind: "artist",
+        label: "Artist / Creator",
+        sub: "Visual art · Photography · Music",
+        detail: "Prove your work is human-made, not AI-generated. C2PA-signed proof on the blockchain.",
+      },
+      {
+        kind: "organization",
+        label: "Organization",
+        sub: "NGO · Institution · Public body",
+        detail: "Verified presence for foundations, universities, and public institutions.",
+      },
+    ];
+
     return (
       <div
         style={{
@@ -216,91 +249,112 @@ export default function ClaimPage() {
             alignItems: "center",
             justifyContent: "center",
             padding: m ? "80px 24px 60px" : "60px 40px",
-            textAlign: "center",
           }}
         >
           <div
             style={{
               fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-              fontSize: 11.5,
-              letterSpacing: "1.4px",
+              fontSize: 11,
+              letterSpacing: "1.6px",
               textTransform: "uppercase",
               color: "#9991AC",
-              marginBottom: 26,
+              marginBottom: 20,
+              textAlign: "center",
             }}
           >
-            For businesses
+            verification · discoverability · trust
           </div>
           <div
             style={{
-              fontSize: m ? 36 : 48,
+              fontSize: m ? 32 : 44,
               fontWeight: 600,
-              letterSpacing: "-1.4px",
-              lineHeight: 1.04,
-              maxWidth: 640,
+              letterSpacing: "-1.2px",
+              lineHeight: 1.06,
+              maxWidth: 580,
               color: "#1A1035",
+              textAlign: "center",
+              marginBottom: 14,
             }}
           >
-            Claim your business.
+            Get verified.<br />Get found by AI agents.
           </div>
           <div
             style={{
-              fontSize: 17,
+              fontSize: 16,
               fontWeight: 300,
               lineHeight: 1.6,
               color: "#6B6080",
-              maxWidth: 480,
-              margin: "22px 0 38px",
+              maxWidth: 440,
+              marginBottom: 44,
+              textAlign: "center",
             }}
           >
-            Prove your business is real — through official registries and
-            camera-signed media — and become discoverable to people and AI
-            agents. No ads, ever. Only verification.
+            Choose what you are — we&apos;ll show you exactly how verification
+            makes you discoverable.
           </div>
+
+          {/* Entity kind selector */}
           <div
             style={{
-              display: "flex",
-              gap: 16,
-              alignItems: "center",
-              flexWrap: "wrap",
-              justifyContent: "center",
+              display: "grid",
+              gridTemplateColumns: m ? "1fr" : "1fr 1fr",
+              gap: 14,
+              width: "100%",
+              maxWidth: 640,
+              marginBottom: 36,
             }}
           >
-            <button
-              onClick={() => store.setStep(1)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 9,
-                padding: "13px 24px",
-                borderRadius: 11,
-                background: "#6B3FA0",
-                color: "#fff",
-                fontSize: 15,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              Claim your business →
-            </button>
-            <span
-              onClick={() => {
-                store.setAuthMode("signin");
-                store.setStep(4);
-              }}
-              style={{ fontSize: 14.5, color: "#6B6080", cursor: "pointer" }}
-            >
-              Already verified? Sign in
-            </span>
+            {kinds.map(({ kind, label, sub, detail }) => (
+              <button
+                key={kind}
+                onClick={() => {
+                  store.setEntityKind(kind);
+                  store.setStep(1);
+                }}
+                style={{
+                  textAlign: "left",
+                  background: "none",
+                  border: "1px solid rgba(26,16,53,0.1)",
+                  borderRadius: 12,
+                  padding: "20px 22px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.borderColor = "#6B3FA0";
+                  (e.currentTarget as HTMLElement).style.background = "rgba(107,63,160,0.03)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(26,16,53,0.1)";
+                  (e.currentTarget as HTMLElement).style.background = "none";
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 600, color: "#1A1035", marginBottom: 3 }}>
+                  {label}
+                </div>
+                <div style={{ fontSize: 12, color: "#9991AC", marginBottom: 10 }}>{sub}</div>
+                <div style={{ fontSize: 13, color: "#6B6080", lineHeight: 1.5 }}>{detail}</div>
+              </button>
+            ))}
           </div>
+
+          <span
+            onClick={() => {
+              store.setAuthMode("signin");
+              store.setStep(4);
+            }}
+            style={{ fontSize: 13.5, color: "#9991AC", cursor: "pointer" }}
+          >
+            Already verified? Sign in
+          </span>
+
           <div
             style={{
-              marginTop: 52,
+              marginTop: 48,
               fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
               fontSize: 11,
-              color: "#9991AC",
+              color: "#C8C2D8",
               letterSpacing: "0.4px",
               display: "flex",
               gap: 12,
@@ -309,9 +363,9 @@ export default function ClaimPage() {
             }}
           >
             <span>registry:attested</span>
-            <span style={{ color: "#D8D2E2" }}>·</span>
+            <span>·</span>
             <span>c2pa:verified</span>
-            <span style={{ color: "#D8D2E2" }}>·</span>
+            <span>·</span>
             <span>btc:ts:confirmed</span>
           </div>
         </div>
@@ -461,9 +515,20 @@ export default function ClaimPage() {
           {store.step === 1 && (
             <div>
               <div
-                style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.8px", marginBottom: 24 }}
+                style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.8px", marginBottom: 8 }}
               >
-                What&apos;s your business called?
+                {store.entityKind === "journalist"
+                  ? "What's your name?"
+                  : store.entityKind === "artist"
+                  ? "What's your name?"
+                  : "What's your entity called?"}
+              </div>
+              <div style={{ fontSize: 14, color: "#9091AC", marginBottom: 24 }}>
+                {store.entityKind === "journalist"
+                  ? "We'll search press registries and verify your editorial identity."
+                  : store.entityKind === "artist"
+                  ? "We'll create your verified profile with C2PA-signed proof of authorship."
+                  : "We'll search official government registries to verify your entity."}
               </div>
 
               {/* Search input */}
@@ -483,7 +548,11 @@ export default function ClaimPage() {
                 <input
                   value={store.query}
                   onChange={(e) => store.setQuery(e.target.value)}
-                  placeholder="Legal company name…"
+                  placeholder={
+                    store.entityKind === "journalist" || store.entityKind === "artist"
+                      ? "Your full name…"
+                      : "Legal entity name…"
+                  }
                   style={{
                     flex: 1,
                     border: "none",

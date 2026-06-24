@@ -5,6 +5,7 @@ export type AuthMode = "signup" | "signin";
 export type SearchPhase = "idle" | "searching" | "none" | "results";
 export type ProvePhase = "idle" | "proving" | "proven";
 export type ProveMethod = "domain" | "contact" | "document";
+export type EntityKind = "business" | "journalist" | "artist" | "organization";
 
 export interface RegistryEntity {
   name: string;
@@ -18,6 +19,7 @@ export interface RegistryEntity {
 
 interface OnboardingState {
   step: OnboardingStep;
+  entityKind: EntityKind | null;
   authMode: AuthMode;
   query: string;
   searchPhase: SearchPhase;
@@ -33,6 +35,7 @@ interface OnboardingState {
   paired: boolean;
 
   setStep: (step: OnboardingStep) => void;
+  setEntityKind: (kind: EntityKind) => void;
   setAuthMode: (mode: AuthMode) => void;
   setQuery: (q: string) => void;
   setSearchPhase: (phase: SearchPhase) => void;
@@ -51,6 +54,7 @@ interface OnboardingState {
 
 const initial = {
   step: 0 as OnboardingStep,
+  entityKind: null as EntityKind | null,
   authMode: "signup" as AuthMode,
   query: "",
   searchPhase: "idle" as SearchPhase,
@@ -69,6 +73,7 @@ const initial = {
 export const useOnboardingStore = create<OnboardingState>((set) => ({
   ...initial,
   setStep: (step) => set({ step }),
+  setEntityKind: (entityKind) => set({ entityKind }),
   setAuthMode: (authMode) => set({ authMode }),
   setQuery: (query) => set({ query }),
   setSearchPhase: (searchPhase) => set({ searchPhase }),

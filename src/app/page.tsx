@@ -116,7 +116,7 @@ export default function SearchPage() {
         <Wordmark size="sm" />
       </div>
 
-      {/* Claim your business pill */}
+      {/* Get verified pill */}
       <Link
         href="/claim"
         style={{
@@ -128,9 +128,9 @@ export default function SearchPage() {
           alignItems: "center",
           gap: 7,
           padding: "8px 15px",
-          border: "1px solid rgba(26,16,53,0.12)",
+          border: "1px solid rgba(107,63,160,0.25)",
           borderRadius: 20,
-          background: "rgba(107,63,160,0.025)",
+          background: "rgba(107,63,160,0.06)",
           backdropFilter: "blur(8px)",
           fontSize: 13,
           fontWeight: 600,
@@ -139,7 +139,7 @@ export default function SearchPage() {
           transition: "background 0.16s",
         }}
       >
-        Claim your business{" "}
+        Get verified{" "}
         <span style={{ color: "#6B3FA0" }}>→</span>
       </Link>
 
@@ -176,8 +176,8 @@ export default function SearchPage() {
                 lineHeight: 1.55,
               }}
             >
-              Trust infrastructure for the agent economy. Search businesses
-              verified through official registries and C2PA-signed media.
+              Search verified businesses, journalists, and artists — discoverable
+              by AI agents through official registries and C2PA-signed media.
             </div>
 
             {/* Search bar */}
@@ -201,7 +201,7 @@ export default function SearchPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Search verified businesses…"
+                placeholder="Search verified entities…"
                 style={{
                   flex: 1,
                   border: "none",
@@ -381,7 +381,7 @@ export default function SearchPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search verified businesses…"
+              placeholder="Search verified entities…"
               style={{
                 flex: 1,
                 minWidth: 0,
