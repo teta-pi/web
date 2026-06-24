@@ -66,27 +66,14 @@ export const searchApi = {
     return request(`/search?${params}`);
   },
 
-  // Registry search (Identify step in onboarding)
+  // Registry search (Identify step in onboarding) — calls government registries directly
   searchRegistry: async (
     companyName: string,
     country?: string
   ): Promise<RegistrySearchResult[]> => {
-    const params = new URLSearchParams({ q: companyName, level: "any", limit: "5" });
+    const params = new URLSearchParams({ q: companyName });
     if (country) params.set("country", country);
-    // Use business search as proxy for registry search in Sprint 1
-    // Sprint 2: dedicated registry search endpoint
-    const results = await request<SearchResult[]>(`/search?${params}`);
-    return results
-      .filter((r) => r.registry_data)
-      .map((r) => ({
-        registration_number: r.registry_id || "",
-        legal_name: r.name,
-        status: r.registry_data?.status || "active",
-        founded: r.registry_data?.founded,
-        address: r.registry_data?.address,
-        registry: r.registry_data?.registry || "",
-        country: r.country || "",
-      }));
+    return request<RegistrySearchResult[]>(`/registry/search?${params}`);
   },
 };
 

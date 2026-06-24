@@ -7,12 +7,30 @@ import { BadgePill } from "@/components/ui/BadgePill";
 import { IsoChip } from "@/components/ui/IsoChip";
 import { VerificationIcon, SearchIcon } from "@/components/ui/VerificationIcon";
 import { getDisplayResults } from "@/lib/seedData";
-import type { DisplaySearchResult } from "@/lib/types";
+import type { DisplaySearchResult, SearchResult } from "@/lib/types";
 import { LEVEL_ACCENT, LEVEL_LABEL, LEVEL_HASH } from "@/lib/types";
+import { searchApi } from "@/lib/api";
 
 type Filter = "all" | "full" | "registry" | "video";
 
-const ALL_RESULTS = getDisplayResults();
+const SEED_RESULTS = getDisplayResults();
+
+function toDisplay(r: SearchResult, idx: number): DisplaySearchResult {
+  const rd = r.registry_data;
+  return {
+    ...r,
+    accentColor: LEVEL_ACCENT[r.verification_level],
+    levelLabel: LEVEL_LABEL[r.verification_level],
+    hash: LEVEL_HASH[r.verification_level],
+    iso: r.country ?? "",
+    authority: rd?.registry ?? "",
+    requirement: "",
+    registryId: r.registry_id ? `REG·${r.country}·${r.registry_id}` : "",
+    badgePills: (r.badges ?? []).map((t) => ({ text: t })),
+    hasVideo: r.block_count > 0,
+    id: r.id ?? `api-${idx}`,
+  };
+}
 
 function useViewport() {
   const [vw, setVw] = useState(1280);
@@ -32,6 +50,8 @@ export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [apiResults, setApiResults] = useState<DisplaySearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = useCallback(() => {
@@ -42,7 +62,22 @@ export default function SearchPage() {
     if (e.key === "Enter") handleSubmit();
   };
 
-  const filteredResults: DisplaySearchResult[] = ALL_RESULTS.filter((r) => {
+  // Live API search on submit
+  useEffect(() => {
+    if (!submitted || !query.trim()) return;
+    setSearching(true);
+    searchApi
+      .search(query.trim(), "any", undefined, 20)
+      .then((results) => {
+        setApiResults(results.length > 0 ? results.map(toDisplay) : null);
+      })
+      .catch(() => setApiResults(null))
+      .finally(() => setSearching(false));
+  }, [submitted, query]);
+
+  const pool = apiResults ?? SEED_RESULTS;
+
+  const filteredResults: DisplaySearchResult[] = pool.filter((r) => {
     if (filter === "full" && r.verification_level !== "full") return false;
     if (filter === "registry" && r.verification_level !== "registry") return false;
     if (filter === "video" && !r.hasVideo) return false;
@@ -247,7 +282,19 @@ export default function SearchPage() {
               }}
             >
               <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                {["About", "Registries", "For Agents"].map((l) => (
+                <a
+                  href={process.env.NEXT_PUBLIC_LANDING_URL ?? "http://localhost:3000"}
+                  style={{ color: "#6B6080", textDecoration: "none" }}
+                  onMouseEnter={(e) =>
+                    ((e.target as HTMLElement).style.color = "#6B3FA0")
+                  }
+                  onMouseLeave={(e) =>
+                    ((e.target as HTMLElement).style.color = "#6B6080")
+                  }
+                >
+                  About
+                </a>
+                {["Registries", "For Agents"].map((l) => (
                   <span
                     key={l}
                     style={{ cursor: "pointer" }}
@@ -405,11 +452,25 @@ export default function SearchPage() {
           </div>
 
           {/* Results */}
-          {filteredResults.map((r) => (
+          {searching && (
+            <div
+              style={{
+                padding: "60px 24px",
+                textAlign: "center",
+                color: "#9991AC",
+                fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+                fontSize: 13,
+              }}
+            >
+              Searching registries…
+            </div>
+          )}
+
+          {!searching && filteredResults.map((r) => (
             <ResultRow key={r.slug} result={r} mobile={m} />
           ))}
 
-          {filteredResults.length === 0 && (
+          {!searching && filteredResults.length === 0 && (
             <div
               style={{
                 padding: "60px 24px",

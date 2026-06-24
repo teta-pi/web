@@ -18,6 +18,7 @@ import {
   useOnboardingStore,
   type RegistryEntity,
 } from "@/stores/useOnboardingStore";
+import { searchApi } from "@/lib/api";
 
 function useViewport() {
   const [vw, setVw] = useState(1280);
@@ -30,7 +31,7 @@ function useViewport() {
   return vw;
 }
 
-// Synthesize registry results from a query (mirroring prototype behavior)
+// Synthetic fallback when API is unreachable (dev without Docker)
 function syntheticResults(q: string): RegistryEntity[] {
   if (!q.trim()) return [];
   const base = q.trim();
@@ -47,20 +48,11 @@ function syntheticResults(q: string): RegistryEntity[] {
     {
       name: `${base} Ltd`,
       registryId: `CRN-${Math.floor(Math.random() * 90000 + 10000)}`,
-      iso: "UK",
+      iso: "GB",
       authority: "Companies House",
       city: "London",
       status: "active",
       since: "2020",
-    },
-    {
-      name: `${base} LLC`,
-      registryId: `EIN-${Math.floor(Math.random() * 90 + 10)}-${Math.floor(Math.random() * 9000 + 1000)}`,
-      iso: "US",
-      authority: "Delaware SoS · IRS EIN",
-      city: "Wilmington, DE",
-      status: "active",
-      since: "2021",
     },
   ];
 }
@@ -158,16 +150,27 @@ export default function ClaimPage() {
     }
     store.setSearchPhase("searching");
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const q = store.query.trim().toLowerCase();
-      const noMatch =
-        q.includes("test") ||
-        q.includes("unknown") ||
-        q.includes("asdf") ||
-        q.includes("xxx");
-      if (noMatch) {
-        store.setSearchPhase("none");
-      } else {
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchApi.searchRegistry(store.query.trim());
+        if (results.length === 0) {
+          store.setSearchPhase("none");
+        } else {
+          setSynResults(
+            results.map((r) => ({
+              name: r.legal_name,
+              registryId: r.registration_number,
+              iso: r.country,
+              authority: r.registry,
+              city: r.address?.split(",")[0] ?? "",
+              status: r.status,
+              since: r.founded ?? "",
+            }))
+          );
+          store.setSearchPhase("results");
+        }
+      } catch {
+        // API unavailable (no Docker) — fall back to synthetic
         setSynResults(syntheticResults(store.query));
         store.setSearchPhase("results");
       }
