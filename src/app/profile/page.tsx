@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import QRCode from "react-qr-code";
 import { Wordmark } from "@/components/ui/Wordmark";
 import { BadgePill } from "@/components/ui/BadgePill";
 import { IsoChip } from "@/components/ui/IsoChip";
@@ -10,6 +11,7 @@ import {
   CameraIcon,
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
+import { devices } from "@/lib/api";
 
 function useViewport() {
   const [vw, setVw] = useState(1280);
@@ -317,6 +319,8 @@ function EditView({ mobile: m }: { mobile: boolean }) {
           + Add block
         </div>
       )}
+
+      <PiCamSection businessId={store.businessId} entityName={store.companyName} />
     </div>
   );
 }
@@ -570,6 +574,233 @@ function MediaDisplay({
         >
           Replace
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ===== Pi CAM Connect =====
+function PiCamSection({ businessId, entityName }: { businessId: string | null; entityName: string }) {
+  const [qrData, setQrData] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleConnect() {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+      if (token && businessId) {
+        const data = await devices.generateToken(token);
+        setQrData(JSON.stringify({ token: data.token, entity_id: data.entity_id, entity_name: data.entity_name }));
+      } else {
+        // Demo mode — works without real auth
+        const demoPayload = {
+          token: `demo_${Math.random().toString(36).slice(2, 18)}`,
+          entity_id: businessId || "demo-entity",
+          entity_name: entityName || "My Entity",
+        };
+        setQrData(JSON.stringify(demoPayload));
+      }
+    } catch {
+      setError("Could not generate QR. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <div
+        style={{
+          marginTop: 40,
+          paddingTop: 28,
+          borderTop: "1px solid rgba(26,16,53,0.08)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+            fontSize: 10.5,
+            letterSpacing: "1.4px",
+            textTransform: "uppercase",
+            color: "#9991AC",
+            marginBottom: 14,
+          }}
+        >
+          Pi CAM
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1035", marginBottom: 4 }}>
+              Connect Pi CAM mobile app
+            </div>
+            <div style={{ fontSize: 13, color: "#9991AC", lineHeight: 1.5 }}>
+              Scan QR in the Pi CAM app to link your camera. Photos will be C2PA-signed and uploaded automatically.
+            </div>
+          </div>
+          <button
+            onClick={handleConnect}
+            disabled={loading}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 20px",
+              border: "1.5px solid #6B3FA0",
+              borderRadius: 10,
+              background: "transparent",
+              color: "#6B3FA0",
+              fontSize: 13.5,
+              fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              opacity: loading ? 0.6 : 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {loading ? <SpinnerIcon size={14} /> : <CameraIcon size={14} color="#6B3FA0" />}
+            {loading ? "Generating…" : "Connect Pi CAM"}
+          </button>
+        </div>
+        {error && (
+          <div style={{ marginTop: 10, fontSize: 13, color: "#E8640C" }}>{error}</div>
+        )}
+      </div>
+
+      {qrData && (
+        <PiCamModal
+          qrData={qrData}
+          entityName={entityName}
+          onClose={() => setQrData(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function PiCamModal({
+  qrData,
+  entityName,
+  onClose,
+}: {
+  qrData: string;
+  entityName: string;
+  onClose: () => void;
+}) {
+  const [secondsLeft, setSecondsLeft] = useState(900); // 15 min
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) { clearInterval(t); onClose(); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [onClose]);
+
+  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
+  const ss = String(secondsLeft % 60).padStart(2, "0");
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(26,16,53,0.55)",
+        backdropFilter: "blur(6px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 100,
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff",
+          borderRadius: 18,
+          padding: "32px 28px 28px",
+          maxWidth: 340,
+          width: "100%",
+          textAlign: "center",
+          boxShadow: "0 24px 64px rgba(26,16,53,0.22)",
+        }}
+      >
+        <div style={{ fontSize: 17, fontWeight: 600, color: "#1A1035", marginBottom: 4 }}>
+          Scan with Pi CAM
+        </div>
+        <div style={{ fontSize: 13, color: "#9991AC", marginBottom: 24 }}>
+          {entityName || "your entity"} · expires in{" "}
+          <span
+            style={{
+              fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+              color: secondsLeft < 60 ? "#E8640C" : "#6B3FA0",
+            }}
+          >
+            {mm}:{ss}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "inline-block",
+            padding: 16,
+            background: "#fff",
+            border: "1.5px solid rgba(26,16,53,0.10)",
+            borderRadius: 14,
+            marginBottom: 20,
+          }}
+        >
+          <QRCode
+            value={qrData}
+            size={200}
+            fgColor="#1A1035"
+            bgColor="#ffffff"
+            level="M"
+          />
+        </div>
+
+        <div
+          style={{
+            fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+            fontSize: 10.5,
+            color: "#9991AC",
+            letterSpacing: "0.3px",
+            marginBottom: 20,
+            wordBreak: "break-all",
+          }}
+        >
+          {JSON.parse(qrData).token?.slice(0, 24)}…
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "1px solid rgba(26,16,53,0.12)",
+            borderRadius: 10,
+            background: "transparent",
+            color: "#9991AC",
+            fontSize: 13.5,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Close
+        </button>
       </div>
     </div>
   );

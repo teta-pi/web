@@ -197,3 +197,8 @@ export const blockApi = {
   list: (businessId: string): Promise<Block[]> =>
     request(`/businesses/${businessId}/blocks`),
 };
+
+export const devices = {
+  generateToken: (token: string): Promise<{ token: string; entity_id: string; entity_name: string; expires_in: number }> =>
+    request("/devices/generate-token", { method: "POST" }, token),
+};
