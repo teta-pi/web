@@ -1379,7 +1379,11 @@ export default function ClaimPage() {
                   ].map(({ label, glyph }) => (
                     <button
                       key={label}
-                      onClick={() => store.setAuthed(true)}
+                      title="OAuth coming soon — use email below"
+                      onClick={() => {
+                        // OAuth not yet integrated — guide to email
+                        setEmailVerifyError("OAuth coming soon. Use email below.");
+                      }}
                       style={{
                         width: "100%",
                         display: "flex",
@@ -1391,15 +1395,17 @@ export default function ClaimPage() {
                         background: "transparent",
                         fontSize: 14.5,
                         fontWeight: 600,
-                        color: "#1A1035",
-                        cursor: "pointer",
+                        color: "#9991AC",
+                        cursor: "not-allowed",
                         fontFamily: "inherit",
                         marginBottom: 10,
                         textAlign: "left",
+                        opacity: 0.6,
                       }}
                     >
                       {glyph}
                       {label}
+                      <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 400, color: "#B8B2C8" }}>soon</span>
                     </button>
                   ))}
 
@@ -1437,20 +1443,35 @@ export default function ClaimPage() {
                       marginBottom: 10,
                     }}
                   />
+                  {emailVerifyError && (
+                    <div style={{ color: "#E8640C", fontSize: 13, marginBottom: 10 }}>{emailVerifyError}</div>
+                  )}
                   <button
-                    onClick={() => {
-                      if (emailInput.includes("@")) {
-                        store.setAccountEmail(emailInput);
-                        store.setAuthed(true);
+                    disabled={!emailInput.includes("@") || emailVerifyLoading}
+                    onClick={async () => {
+                      if (!emailInput.includes("@")) return;
+                      setEmailVerifyLoading(true);
+                      setEmailVerifyError("");
+                      try {
+                        const res = await authApi.magicLink(emailInput.trim());
+                        store.setAccountEmail(emailInput.trim());
+                        if (res.dev_token) {
+                          store.setToken(res.dev_token);
+                          store.setAuthed(true);
+                        } else {
+                          store.setAuthed(true); // prod: email sent, proceed
+                        }
+                      } catch {
+                        setEmailVerifyError("Could not send email — try again.");
+                      } finally {
+                        setEmailVerifyLoading(false);
                       }
                     }}
                     style={{
                       width: "100%",
                       padding: "13px 16px",
                       borderRadius: 9,
-                      background: emailInput.includes("@")
-                        ? "#6B3FA0"
-                        : "rgba(26,16,53,0.06)",
+                      background: emailInput.includes("@") ? "#6B3FA0" : "rgba(26,16,53,0.06)",
                       color: emailInput.includes("@") ? "#fff" : "#9991AC",
                       fontSize: 15,
                       fontWeight: 600,
@@ -1458,9 +1479,13 @@ export default function ClaimPage() {
                       cursor: emailInput.includes("@") ? "pointer" : "default",
                       fontFamily: "inherit",
                       marginBottom: 16,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
                     }}
                   >
-                    Continue with email
+                    {emailVerifyLoading ? <><SpinnerIcon size={15} /> Sending…</> : "Continue with email →"}
                   </button>
                   <div
                     style={{

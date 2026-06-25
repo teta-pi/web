@@ -24,7 +24,7 @@ function useViewport() {
   return vw;
 }
 
-// Simulate registry check debounce (business only)
+// Real registry check debounce (business only)
 function useRegistryCheck(name: string, enabled: boolean) {
   const store = useProfileStore();
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -42,30 +42,33 @@ function useRegistryCheck(name: string, enabled: boolean) {
     }
     store.setNameStatus("checking");
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const q = name.trim().toLowerCase();
-      if (
-        q.includes("test") ||
-        q.includes("xxx") ||
-        q.includes("unknown")
-      ) {
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const { searchApi } = await import("@/lib/api");
+        const results = await searchApi.searchRegistry(name.trim());
+        if (results.length > 0) {
+          const r = results[0];
+          store.setNameStatus("verified");
+          store.setRegistryData({
+            iso: r.country || "",
+            authority: r.registry,
+            registryId: r.registration_number,
+            status: r.status || "active",
+            city: r.address || "",
+            since: r.founded || "",
+          });
+        } else {
+          store.setNameStatus("not_found");
+          store.setRegistryData(null);
+        }
+      } catch {
         store.setNameStatus("not_found");
         store.setRegistryData(null);
-      } else {
-        store.setNameStatus("verified");
-        store.setRegistryData({
-          iso: "DE",
-          authority: "Handelsregister",
-          registryId: `REG·DE·HRB-${Math.floor(Math.random() * 90000 + 10000)}`,
-          status: "active",
-          city: "Berlin",
-          since: "2019",
-        });
       }
-    }, 850);
+    }, 900);
     return () => clearTimeout(debounceRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name]);
+  }, [name, enabled]);
 }
 
 export default function ProfilePage() {
