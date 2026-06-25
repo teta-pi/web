@@ -83,9 +83,10 @@ export const businessApi = {
     name: string,
     description?: string,
     country?: string,
-    token?: string
+    token?: string,
+    entityType?: string
   ): Promise<Business> =>
-    request("/businesses", { method: "POST", body: JSON.stringify({ name, description, country }) }, token),
+    request("/businesses", { method: "POST", body: JSON.stringify({ name, description, country, entity_type: entityType ?? "business" }) }, token),
 
   list: (token: string): Promise<Business[]> =>
     request("/businesses", {}, token),

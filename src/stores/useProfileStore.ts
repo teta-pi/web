@@ -17,8 +17,11 @@ export interface ProfileBlock {
   media: BlockMedia | null;
 }
 
+export type ProfileEntityKind = "business" | "journalist" | "artist" | "organization";
+
 interface ProfileState {
   view: ProfileView;
+  entityKind: ProfileEntityKind;
   companyName: string;
   nameStatus: NameStatus;
   registryData: {
@@ -33,8 +36,10 @@ interface ProfileState {
   blocks: ProfileBlock[];
   dragId: string | null;
   businessId: string | null;
+  savedAt: Date | null;
 
   setView: (view: ProfileView) => void;
+  setEntityKind: (kind: ProfileEntityKind) => void;
   setCompanyName: (name: string) => void;
   setNameStatus: (status: NameStatus) => void;
   setRegistryData: (data: ProfileState["registryData"]) => void;
@@ -46,12 +51,14 @@ interface ProfileState {
   setDragId: (id: string | null) => void;
   reorderBlocks: (from: number, to: number) => void;
   setBusinessId: (id: string) => void;
+  setSavedAt: (d: Date | null) => void;
 }
 
 let _blockCounter = 1;
 
 export const useProfileStore = create<ProfileState>((set) => ({
   view: "edit",
+  entityKind: "business",
   companyName: "",
   nameStatus: "idle",
   registryData: null,
@@ -59,8 +66,10 @@ export const useProfileStore = create<ProfileState>((set) => ({
   blocks: [],
   dragId: null,
   businessId: null,
+  savedAt: null,
 
   setView: (view) => set({ view }),
+  setEntityKind: (entityKind) => set({ entityKind }),
   setCompanyName: (companyName) => set({ companyName }),
   setNameStatus: (nameStatus) => set({ nameStatus }),
   setRegistryData: (registryData) => set({ registryData }),
@@ -96,4 +105,5 @@ export const useProfileStore = create<ProfileState>((set) => ({
       return { blocks };
     }),
   setBusinessId: (businessId) => set({ businessId }),
+  setSavedAt: (savedAt) => set({ savedAt }),
 }));

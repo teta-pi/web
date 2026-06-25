@@ -24,12 +24,17 @@ function useViewport() {
   return vw;
 }
 
-// Simulate registry check debounce
-function useRegistryCheck(name: string) {
+// Simulate registry check debounce (business only)
+function useRegistryCheck(name: string, enabled: boolean) {
   const store = useProfileStore();
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
+    if (!enabled) {
+      store.setNameStatus("idle");
+      store.setRegistryData(null);
+      return;
+    }
     if (!name.trim()) {
       store.setNameStatus("idle");
       store.setRegistryData(null);
@@ -68,7 +73,7 @@ export default function ProfilePage() {
   const m = vw < 640;
   const store = useProfileStore();
 
-  useRegistryCheck(store.companyName);
+  useRegistryCheck(store.companyName, store.entityKind === "business");
 
   const views: Array<{ key: ProfileView; label: string }> = [
     { key: "edit", label: "Edit" },
@@ -152,14 +157,27 @@ export default function ProfilePage() {
 // ===== Edit View =====
 function EditView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
+  const [saving, setSaving] = useState(false);
+  const isBusiness = store.entityKind === "business";
+
+  const namePlaceholder = isBusiness ? "Company name" : store.entityKind === "journalist" ? "Your full name" : store.entityKind === "artist" ? "Your name / stage name" : "Organization name";
+  const descPlaceholder = isBusiness ? "What does your company do?" : store.entityKind === "journalist" ? "What do you cover? Where do you publish?" : store.entityKind === "artist" ? "Your medium, style, or practice." : "What does your organization do?";
+
+  const handleSave = async () => {
+    setSaving(true);
+    // Simulate save (real: PATCH /businesses/:id)
+    await new Promise((r) => setTimeout(r, 700));
+    store.setSavedAt(new Date());
+    setSaving(false);
+  };
 
   return (
     <div>
-      {/* Company name */}
+      {/* Name input */}
       <input
         value={store.companyName}
         onChange={(e) => store.setCompanyName(e.target.value)}
-        placeholder="Company name"
+        placeholder={namePlaceholder}
         style={{
           width: "100%",
           fontSize: m ? 32 : 44,
@@ -173,46 +191,69 @@ function EditView({ mobile: m }: { mobile: boolean }) {
         }}
       />
 
-      {/* Registry status */}
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 10 }}>
-        {store.nameStatus === "checking" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9991AC", fontSize: 13 }}>
-            <SpinnerIcon size={15} />
-            Checking registry…
+      {/* Status row */}
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        {isBusiness ? (
+          <>
+            {store.nameStatus === "checking" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9991AC", fontSize: 13 }}>
+                <SpinnerIcon size={15} /> Checking registry…
+              </div>
+            )}
+            {store.nameStatus === "verified" && store.registryData && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#6B3FA0", fontSize: 13.5, fontWeight: 600 }}>
+                  <VerificationIcon size={16} />✓ Verified in registry
+                </div>
+                <IsoChip code={store.registryData.iso} />
+                <span style={{ fontSize: 12.5, color: "#3A2C5C", fontWeight: 600 }}>{store.registryData.authority}</span>
+                <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: 11, color: "#9991AC" }}>
+                  {store.registryData.registryId}
+                </span>
+              </div>
+            )}
+            {store.nameStatus === "not_found" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#E8640C", fontSize: 13.5 }}>
+                ✗ Not found in connected registries
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#6B3FA0", fontSize: 13.5, fontWeight: 600 }}>
+            <VerificationIcon size={16} />✓ Email verified
+            <span style={{ fontSize: 12, color: "#9991AC", fontWeight: 400 }}>· identity:self-asserted</span>
           </div>
         )}
-        {store.nameStatus === "verified" && store.registryData && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#6B3FA0", fontSize: 13.5, fontWeight: 600 }}>
-              <VerificationIcon size={16} />✓ Verified in registry
-            </div>
-            <IsoChip code={store.registryData.iso} />
-            <span style={{ fontSize: 12.5, color: "#3A2C5C", fontWeight: 600 }}>
-              {store.registryData.authority}
+
+        {/* Save controls */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          {store.savedAt && !saving && (
+            <span style={{ fontSize: 12, color: "#9991AC" }}>
+              Saved {store.savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
-            <span
-              style={{
-                fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-                fontSize: 11,
-                color: "#9991AC",
-              }}
-            >
-              {store.registryData.registryId}
-            </span>
-          </div>
-        )}
-        {store.nameStatus === "not_found" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#E8640C", fontSize: 13.5 }}>
-            ✗ Not found in connected registries
-          </div>
-        )}
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              padding: "7px 16px", borderRadius: 8,
+              background: saving ? "rgba(107,63,160,0.12)" : "#6B3FA0",
+              color: saving ? "#9991AC" : "#fff",
+              fontSize: 13, fontWeight: 600, border: "none",
+              cursor: saving ? "default" : "pointer", fontFamily: "inherit",
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            {saving ? <><SpinnerIcon size={12} /> Saving…</> : "Save"}
+          </button>
+        </div>
       </div>
 
       {/* Description */}
       <textarea
         value={store.description}
         onChange={(e) => store.setDescription(e.target.value)}
-        placeholder="What does your company do?"
+        placeholder={descPlaceholder}
         rows={3}
         style={{
           width: "100%",

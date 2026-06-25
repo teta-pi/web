@@ -33,6 +33,8 @@ interface OnboardingState {
   email: string;
   accountEmail: string;
   paired: boolean;
+  token: string | null;
+  createdEntityId: string | null;
 
   setStep: (step: OnboardingStep) => void;
   setEntityKind: (kind: EntityKind) => void;
@@ -49,6 +51,8 @@ interface OnboardingState {
   setEmail: (email: string) => void;
   setAccountEmail: (email: string) => void;
   setPaired: (paired: boolean) => void;
+  setToken: (token: string | null) => void;
+  setCreatedEntityId: (id: string | null) => void;
   reset: () => void;
 }
 
@@ -68,6 +72,8 @@ const initial = {
   email: "",
   accountEmail: "",
   paired: false,
+  token: null as string | null,
+  createdEntityId: null as string | null,
 };
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
@@ -87,5 +93,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setEmail: (email) => set({ email }),
   setAccountEmail: (accountEmail) => set({ accountEmail }),
   setPaired: (paired) => set({ paired }),
+  setToken: (token) => set({ token }),
+  setCreatedEntityId: (createdEntityId) => set({ createdEntityId }),
   reset: () => set(initial),
 }));
