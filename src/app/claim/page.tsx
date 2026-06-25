@@ -142,9 +142,11 @@ export default function ClaimPage() {
   >(null);
   const [emailInput, setEmailInput] = useState("");
 
-  // Live registry search debounce (Step 1)
+  const isBusiness = store.entityKind === "business";
+
+  // Live registry search debounce (Step 1 — business only)
   useEffect(() => {
-    if (store.step !== 1) return;
+    if (store.step !== 1 || !isBusiness) return;
     if (!store.query.trim()) {
       store.setSearchPhase("idle");
       return;
@@ -171,13 +173,13 @@ export default function ClaimPage() {
           store.setSearchPhase("results");
         }
       } catch {
-        // API unavailable (no Docker) — fall back to synthetic
+        // API unavailable — fall back to synthetic
         setSynResults(syntheticResults(store.query));
         store.setSearchPhase("results");
       }
     }, 700);
     return () => clearTimeout(debounceRef.current);
-  }, [store.query, store.step]);
+  }, [store.query, store.step, isBusiness]);
 
   const heroPad = m ? "80px 24px 60px" : "0";
   const flowPad = m ? "80px 20px 60px" : "80px 40px 80px";
@@ -517,21 +519,19 @@ export default function ClaimPage() {
               <div
                 style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.8px", marginBottom: 8 }}
               >
-                {store.entityKind === "journalist"
-                  ? "What's your name?"
-                  : store.entityKind === "artist"
-                  ? "What's your name?"
-                  : "What's your entity called?"}
+                {isBusiness ? "What's your company called?" : "What's your name?"}
               </div>
               <div style={{ fontSize: 14, color: "#9091AC", marginBottom: 24 }}>
-                {store.entityKind === "journalist"
-                  ? "We'll search press registries and verify your editorial identity."
+                {isBusiness
+                  ? "We'll search official government registries to verify your entity."
+                  : store.entityKind === "journalist"
+                  ? "Your name or handle as you publish — this becomes your verified identity on TETA+PI."
                   : store.entityKind === "artist"
-                  ? "We'll create your verified profile with C2PA-signed proof of authorship."
-                  : "We'll search official government registries to verify your entity."}
+                  ? "Your name or artist handle — we'll attach C2PA-signed proof of authorship to your work."
+                  : "Your organization name — this becomes your verified identity on TETA+PI."}
               </div>
 
-              {/* Search input */}
+              {/* Input */}
               <div
                 style={{
                   display: "flex",
@@ -548,11 +548,7 @@ export default function ClaimPage() {
                 <input
                   value={store.query}
                   onChange={(e) => store.setQuery(e.target.value)}
-                  placeholder={
-                    store.entityKind === "journalist" || store.entityKind === "artist"
-                      ? "Your full name…"
-                      : "Legal entity name…"
-                  }
+                  placeholder={isBusiness ? "Legal company name…" : "Your name or username…"}
                   style={{
                     flex: 1,
                     border: "none",
@@ -564,98 +560,130 @@ export default function ClaimPage() {
                 />
               </div>
 
-              {/* Phase feedback */}
-              {store.searchPhase === "idle" && (
-                <div
-                  style={{
-                    fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-                    fontSize: 11.5,
-                    color: "#9991AC",
-                    letterSpacing: "0.4px",
-                  }}
-                >
-                  EU · US · UK · APAC registries connected
-                </div>
-              )}
-              {store.searchPhase === "searching" && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    color: "#9991AC",
-                    fontSize: 13,
-                  }}
-                >
-                  <SpinnerIcon size={16} />
-                  Searching registries…
-                </div>
-              )}
-              {store.searchPhase === "none" && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#E8640C", fontSize: 13 }}>
-                  ✗ No registry match — try the full legal name
-                </div>
-              )}
-              {store.searchPhase === "results" && synResults.length > 0 && (
-                <div>
-                  <div
-                    style={{
-                      fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-                      fontSize: 11,
-                      color: "#9991AC",
-                      marginBottom: 12,
-                      letterSpacing: "0.3px",
-                    }}
-                  >
-                    {synResults.length} matches — select yours
-                  </div>
-                  {synResults.map((r) => (
+              {/* Business: registry search feedback */}
+              {isBusiness && (
+                <>
+                  {store.searchPhase === "idle" && (
                     <div
-                      key={r.registryId}
-                      onClick={() => {
-                        store.setEntity(r);
-                        store.setStep(2);
-                      }}
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        padding: "13px 16px",
-                        border: "1px solid rgba(26,16,53,0.08)",
-                        borderRadius: 9,
-                        marginBottom: 8,
-                        cursor: "pointer",
-                        transition: "background 0.16s",
+                        fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+                        fontSize: 11.5,
+                        color: "#9991AC",
+                        letterSpacing: "0.4px",
                       }}
-                      onMouseEnter={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background =
-                          "rgba(107,63,160,0.035)")
-                      }
-                      onMouseLeave={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background =
-                          "transparent")
-                      }
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 16, fontWeight: 600 }}>{r.name}</span>
-                        <IsoChip code={r.iso} />
-                        <span style={{ fontSize: 12, color: "#6B6080" }}>
-                          {r.authority} · {r.city}
-                        </span>
-                      </div>
-                      <span
+                      EU · US · UK · APAC registries connected
+                    </div>
+                  )}
+                  {store.searchPhase === "searching" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9991AC", fontSize: 13 }}>
+                      <SpinnerIcon size={16} />
+                      Searching registries…
+                    </div>
+                  )}
+                  {store.searchPhase === "none" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#E8640C", fontSize: 13 }}>
+                      ✗ No registry match — try the full legal name
+                    </div>
+                  )}
+                  {store.searchPhase === "results" && synResults.length > 0 && (
+                    <div>
+                      <div
                         style={{
                           fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
                           fontSize: 11,
                           color: "#9991AC",
+                          marginBottom: 12,
+                          letterSpacing: "0.3px",
                         }}
                       >
-                        {r.registryId}
-                      </span>
+                        {synResults.length} matches — select yours
+                      </div>
+                      {synResults.map((r) => (
+                        <div
+                          key={r.registryId}
+                          onClick={() => {
+                            store.setEntity(r);
+                            store.setStep(2);
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            padding: "13px 16px",
+                            border: "1px solid rgba(26,16,53,0.08)",
+                            borderRadius: 9,
+                            marginBottom: 8,
+                            cursor: "pointer",
+                            transition: "background 0.16s",
+                          }}
+                          onMouseEnter={(e) =>
+                            ((e.currentTarget as HTMLElement).style.background = "rgba(107,63,160,0.035)")
+                          }
+                          onMouseLeave={(e) =>
+                            ((e.currentTarget as HTMLElement).style.background = "transparent")
+                          }
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 16, fontWeight: 600 }}>{r.name}</span>
+                            <IsoChip code={r.iso} />
+                            <span style={{ fontSize: 12, color: "#6B6080" }}>
+                              {r.authority} · {r.city}
+                            </span>
+                          </div>
+                          <span
+                            style={{
+                              fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+                              fontSize: 11,
+                              color: "#9991AC",
+                            }}
+                          >
+                            {r.registryId}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
+              )}
+
+              {/* Non-business: simple continue */}
+              {!isBusiness && (
+                <>
+                  <div style={{ fontSize: 12, color: "#9991AC", marginBottom: 20 }}>
+                    This name will appear on your verified profile. You can add links and media in the next steps.
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!store.query.trim()) return;
+                      store.setEntity({
+                        name: store.query.trim(),
+                        registryId: "",
+                        iso: "",
+                        authority: "self-asserted",
+                        city: "",
+                        status: "active",
+                        since: "",
+                      });
+                      store.setStep(2);
+                    }}
+                    disabled={!store.query.trim()}
+                    style={{
+                      padding: "13px 28px",
+                      borderRadius: 11,
+                      background: store.query.trim() ? "#6B3FA0" : "rgba(26,16,53,0.08)",
+                      color: store.query.trim() ? "#fff" : "#9991AC",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      border: "none",
+                      cursor: store.query.trim() ? "pointer" : "default",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Continue →
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -666,7 +694,7 @@ export default function ClaimPage() {
               <div
                 style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.8px", marginBottom: 28 }}
               >
-                Is this your business?
+                {isBusiness ? "Is this your business?" : "Confirm your identity"}
               </div>
               <div
                 style={{
@@ -679,53 +707,77 @@ export default function ClaimPage() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: "#6B3FA0",
-                    }}
-                  />
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#6B3FA0" }} />
                   <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.4px" }}>
                     {store.entity.name}
                   </span>
                 </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "10px 20px",
-                    fontSize: 13,
-                    marginLeft: 18,
-                  }}
-                >
-                  {[
-                    ["Registry", <><IsoChip code={store.entity.iso} /> {store.entity.authority}</>],
-                    ["Registry ID", <span className="mono" style={{ color: "#9991AC" }}>{store.entity.registryId}</span>],
-                    ["Status", store.entity.status],
-                    ["Registered", `${store.entity.city} · since ${store.entity.since}`],
-                  ].map(([label, value]) => (
-                    <div key={String(label)}>
-                      <div style={{ color: "#9991AC", fontSize: 11, marginBottom: 3 }}>
-                        {label}
-                      </div>
-                      <div style={{ color: "#3A2C5C", fontWeight: 600 }}>{value}</div>
+
+                {isBusiness ? (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "10px 20px",
+                        fontSize: 13,
+                        marginLeft: 18,
+                      }}
+                    >
+                      {[
+                        ["Registry", <><IsoChip code={store.entity.iso} /> {store.entity.authority}</>],
+                        ["Registry ID", <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", color: "#9991AC" }}>{store.entity.registryId}</span>],
+                        ["Status", store.entity.status],
+                        ["Registered", `${store.entity.city} · since ${store.entity.since}`],
+                      ].map(([label, value]) => (
+                        <div key={String(label)}>
+                          <div style={{ color: "#9991AC", fontSize: 11, marginBottom: 3 }}>{label}</div>
+                          <div style={{ color: "#3A2C5C", fontWeight: 600 }}>{value}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div
-                  style={{
-                    fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-                    fontSize: 11,
-                    color: "#9991AC",
-                    marginTop: 16,
-                    marginLeft: 18,
-                  }}
-                >
-                  #registry:attested
-                </div>
+                    <div
+                      style={{
+                        fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+                        fontSize: 11,
+                        color: "#9991AC",
+                        marginTop: 16,
+                        marginLeft: 18,
+                      }}
+                    >
+                      #registry:attested
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ marginLeft: 18 }}>
+                    <div style={{ fontSize: 13, color: "#6B6080", marginBottom: 12, lineHeight: 1.5 }}>
+                      {store.entityKind === "journalist"
+                        ? "This name will be your verified journalist identity on TETA+PI. AI agents will be able to find and cite your work."
+                        : store.entityKind === "artist"
+                        ? "This name will be your verified artist identity. Your media will carry C2PA-signed proof of human authorship."
+                        : "This name will be your verified organization identity on TETA+PI."}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {["c2pa:verified", "btc:ts:confirmed", "identity:self-asserted"].map((tag) => (
+                        <span
+                          key={tag}
+                          style={{
+                            fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+                            fontSize: 11,
+                            color: "#9991AC",
+                            background: "rgba(107,63,160,0.06)",
+                            padding: "3px 8px",
+                            borderRadius: 4,
+                          }}
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <button
                   onClick={() => store.setStep(3)}
@@ -742,13 +794,13 @@ export default function ClaimPage() {
                     textAlign: "left",
                   }}
                 >
-                  Yes, this is us →
+                  {isBusiness ? "Yes, this is us →" : "Yes, that's me →"}
                 </button>
                 <span
                   onClick={() => store.setStep(1)}
                   style={{ fontSize: 13.5, color: "#6B6080", cursor: "pointer" }}
                 >
-                  Not us — search again
+                  {isBusiness ? "Not us — search again" : "Change name"}
                 </span>
               </div>
             </div>
@@ -760,10 +812,14 @@ export default function ClaimPage() {
               <div
                 style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.8px", marginBottom: 8 }}
               >
-                Prove you represent {store.entity?.name ?? "your business"}
+                {isBusiness
+                  ? `Prove you represent ${store.entity?.name ?? "your business"}`
+                  : `Prove you are ${store.entity?.name ?? "yourself"}`}
               </div>
               <div style={{ fontSize: 15, color: "#6B6080", marginBottom: 28, lineHeight: 1.5 }}>
-                We need to confirm you&apos;re authorised. Choose any one method.
+                {isBusiness
+                  ? "We need to confirm you're authorised. Choose any one method."
+                  : "Verify ownership of your identity — email, social link, or a signed document."}
               </div>
 
               {!store.proven ? (
