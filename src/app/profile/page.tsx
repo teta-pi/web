@@ -76,6 +76,16 @@ export default function ProfilePage() {
   const m = vw < 640;
   const store = useProfileStore();
 
+  // Restore auth session from localStorage (written by claim flow on Step 5)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("auth_token");
+    const entityId = localStorage.getItem("entity_id");
+    if (token) store.setAuthToken(token);
+    if (entityId) store.setBusinessId(entityId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useRegistryCheck(store.companyName, store.entityKind === "business");
 
   const views: Array<{ key: ProfileView; label: string }> = [
@@ -625,29 +635,24 @@ function MediaDisplay({
 
 // ===== Pi CAM Connect =====
 function PiCamSection({ businessId, entityName }: { businessId: string | null; entityName: string }) {
+  const store = useProfileStore();
   const [qrData, setQrData] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleConnect() {
+    const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+    if (!token) {
+      setError("Sign in first — complete the claim flow to get a verified account.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-      if (token && businessId) {
-        const data = await devices.generateToken(token);
-        setQrData(JSON.stringify({ token: data.token, entity_id: data.entity_id, entity_name: data.entity_name }));
-      } else {
-        // Demo mode — works without real auth
-        const demoPayload = {
-          token: `demo_${Math.random().toString(36).slice(2, 18)}`,
-          entity_id: businessId || "demo-entity",
-          entity_name: entityName || "My Entity",
-        };
-        setQrData(JSON.stringify(demoPayload));
-      }
-    } catch {
-      setError("Could not generate QR. Try again.");
+      const data = await devices.generateToken(token);
+      setQrData(JSON.stringify({ token: data.token, entity_id: data.entity_id, entity_name: data.entity_name }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not generate QR. Try again.");
     } finally {
       setLoading(false);
     }

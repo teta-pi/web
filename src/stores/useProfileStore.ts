@@ -36,6 +36,7 @@ interface ProfileState {
   blocks: ProfileBlock[];
   dragId: string | null;
   businessId: string | null;
+  authToken: string | null;
   savedAt: Date | null;
 
   setView: (view: ProfileView) => void;
@@ -51,6 +52,7 @@ interface ProfileState {
   setDragId: (id: string | null) => void;
   reorderBlocks: (from: number, to: number) => void;
   setBusinessId: (id: string) => void;
+  setAuthToken: (token: string) => void;
   setSavedAt: (d: Date | null) => void;
 }
 
@@ -66,6 +68,7 @@ export const useProfileStore = create<ProfileState>((set) => ({
   blocks: [],
   dragId: null,
   businessId: null,
+  authToken: null,
   savedAt: null,
 
   setView: (view) => set({ view }),
@@ -105,5 +108,6 @@ export const useProfileStore = create<ProfileState>((set) => ({
       return { blocks };
     }),
   setBusinessId: (businessId) => set({ businessId }),
+  setAuthToken: (authToken) => set({ authToken }),
   setSavedAt: (savedAt) => set({ savedAt }),
 }));

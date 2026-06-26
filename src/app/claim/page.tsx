@@ -1770,6 +1770,10 @@ export default function ClaimPage() {
 
         <Link
           href="/profile"
+          onClick={() => {
+            if (store.token) localStorage.setItem("auth_token", store.token);
+            if (store.createdEntityId) localStorage.setItem("entity_id", store.createdEntityId);
+          }}
           style={{
             display: "inline-flex",
             alignItems: "center",
