@@ -386,6 +386,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
   const store = useProfileStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(!block.title); // new blocks start in edit mode
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const accentColor =
     block.media?.phase === "done"
@@ -393,11 +394,29 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
       : "rgba(26,16,53,0.10)";
 
   const handleFileUpload = useCallback(
-    (source: "pi_camera" | "file") => {
+    async (source: "pi_camera" | "file", file?: File) => {
+      setUploadError(null);
       store.setBlockMedia(block.id, { source, phase: source === "pi_camera" ? "signing" : "timestamping" });
+
+      // Real upload for file source
+      if (source === "file" && file) {
+        const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+        if (token && store.businessId) {
+          try {
+            const { mediaApi } = await import("@/lib/api");
+            await mediaApi.upload(block.id, file, file.type.split("/")[0] || "image", token);
+          } catch (e) {
+            setUploadError(e instanceof Error ? e.message : "Upload failed");
+            store.setBlockMedia(block.id, null);
+            return;
+          }
+        }
+      }
+
+      // Both Pi CAM (handled server-side) and file finish as "done"
       setTimeout(
         () => store.setBlockMedia(block.id, { source, phase: "done" }),
-        source === "pi_camera" ? 850 : 1300
+        source === "pi_camera" ? 850 : 400
       );
     },
     [block.id, store]
@@ -455,18 +474,21 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
             style={{ width: "100%", fontSize: 15, fontWeight: 300, color: "#6B6080", border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", lineHeight: 1.55, marginBottom: 16 }}
           />
           {!block.media ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 16px", border: "1px dashed rgba(26,16,53,0.14)", borderRadius: 9, flexWrap: "wrap" }}>
-              <CameraIcon size={22} color="#9991AC" />
-              <button
-                onClick={() => handleFileUpload("pi_camera")}
-                style={{ padding: "9px 16px", border: "1.5px solid #6B3FA0", borderRadius: 9, background: "transparent", color: "#6B3FA0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-              >
-                Upload from PI Camera
-              </button>
-              <span onClick={() => fileRef.current?.click()} style={{ fontSize: 13, color: "#9991AC", cursor: "pointer" }}>
-                or upload a file
-              </span>
-              <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={() => handleFileUpload("file")} />
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 16px", border: "1px dashed rgba(26,16,53,0.14)", borderRadius: 9, flexWrap: "wrap" }}>
+                <CameraIcon size={22} color="#9991AC" />
+                <button
+                  onClick={() => handleFileUpload("pi_camera")}
+                  style={{ padding: "9px 16px", border: "1.5px solid #6B3FA0", borderRadius: 9, background: "transparent", color: "#6B3FA0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  Upload from PI Camera
+                </button>
+                <span onClick={() => fileRef.current?.click()} style={{ fontSize: 13, color: "#9991AC", cursor: "pointer" }}>
+                  or upload a file
+                </span>
+                <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload("file", f); }} />
+              </div>
+              {uploadError && <div style={{ fontSize: 12, color: "#E8640C", marginTop: 6 }}>{uploadError}</div>}
             </div>
           ) : (
             <MediaDisplay block={block} onReplace={() => store.setBlockMedia(block.id, null)} />
