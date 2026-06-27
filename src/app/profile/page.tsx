@@ -11,7 +11,7 @@ import {
   CameraIcon,
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
-import { devices } from "@/lib/api";
+import { devices, authApi } from "@/lib/api";
 
 function useViewport() {
   const [vw, setVw] = useState(1280);
@@ -83,6 +83,8 @@ export default function ProfilePage() {
     const entityId = localStorage.getItem("entity_id");
     if (token) store.setAuthToken(token);
     if (entityId) store.setBusinessId(entityId);
+    const kind = localStorage.getItem("entity_kind") as "business" | "journalist" | "artist" | "organization" | null;
+    if (kind) store.setEntityKind(kind);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -383,21 +385,18 @@ function EditView({ mobile: m }: { mobile: boolean }) {
 function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean }) {
   const store = useProfileStore();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [editing, setEditing] = useState(!block.title); // new blocks start in edit mode
 
   const accentColor =
     block.media?.phase === "done"
-      ? block.media.source === "pi_camera"
-        ? "#6B3FA0"
-        : "#E8640C"
+      ? block.media.source === "pi_camera" ? "#6B3FA0" : "#E8640C"
       : "rgba(26,16,53,0.10)";
 
   const handleFileUpload = useCallback(
     (source: "pi_camera" | "file") => {
       store.setBlockMedia(block.id, { source, phase: source === "pi_camera" ? "signing" : "timestamping" });
       setTimeout(
-        () => {
-          store.setBlockMedia(block.id, { source, phase: "done" });
-        },
+        () => store.setBlockMedia(block.id, { source, phase: "done" }),
         source === "pi_camera" ? 850 : 1300
       );
     },
@@ -410,112 +409,82 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
         border: "1px solid rgba(26,16,53,0.08)",
         borderLeft: `3px solid ${accentColor}`,
         borderRadius: "0 13px 13px 0",
-        padding: "20px 20px 20px 18px",
+        padding: "18px 20px 16px 18px",
         marginBottom: 16,
         background: "rgba(107,63,160,0.008)",
       }}
     >
-      {/* Card header: drag + remove */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 12,
-        }}
-      >
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editing ? 12 : 6 }}>
         <span style={{ color: "#D8D2E2", fontSize: 16, cursor: "grab" }}>⠿</span>
-        <span
-          onClick={() => store.removeBlock(block.id)}
-          style={{ color: "#9991AC", cursor: "pointer", fontSize: 16 }}
-        >
-          ×
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {!editing && (
+            <span
+              onClick={() => setEditing(true)}
+              style={{ fontSize: 12, color: "#9991AC", cursor: "pointer", padding: "3px 8px", border: "1px solid rgba(26,16,53,0.12)", borderRadius: 6 }}
+            >
+              Edit
+            </span>
+          )}
+          {editing && (
+            <span
+              onClick={() => setEditing(false)}
+              style={{ fontSize: 12, color: "#6B3FA0", cursor: "pointer", fontWeight: 600, padding: "3px 8px", border: "1.5px solid #6B3FA0", borderRadius: 6 }}
+            >
+              Done
+            </span>
+          )}
+          <span onClick={() => store.removeBlock(block.id)} style={{ color: "#9991AC", cursor: "pointer", fontSize: 16 }}>×</span>
+        </div>
       </div>
 
-      {/* Title */}
-      <input
-        value={block.title}
-        onChange={(e) => store.updateBlock(block.id, { title: e.target.value })}
-        placeholder="Block title"
-        style={{
-          width: "100%",
-          fontSize: m ? 18 : 21,
-          fontWeight: 600,
-          color: "#1A1035",
-          border: "none",
-          background: "transparent",
-          fontFamily: "inherit",
-          marginBottom: 8,
-        }}
-      />
-
-      {/* Description */}
-      <textarea
-        value={block.desc}
-        onChange={(e) => store.updateBlock(block.id, { desc: e.target.value })}
-        placeholder="Describe what this block shows…"
-        rows={2}
-        style={{
-          width: "100%",
-          fontSize: 15,
-          fontWeight: 300,
-          color: "#6B6080",
-          border: "none",
-          background: "transparent",
-          fontFamily: "inherit",
-          resize: "vertical",
-          lineHeight: 1.55,
-          marginBottom: 16,
-        }}
-      />
-
-      {/* Media area */}
-      {!block.media ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "20px 16px",
-            border: "1px dashed rgba(26,16,53,0.14)",
-            borderRadius: 9,
-            flexWrap: "wrap",
-          }}
-        >
-          <CameraIcon size={22} color="#9991AC" />
-          <button
-            onClick={() => handleFileUpload("pi_camera")}
-            style={{
-              padding: "9px 16px",
-              border: "1.5px solid #6B3FA0",
-              borderRadius: 9,
-              background: "transparent",
-              color: "#6B3FA0",
-              fontSize: 13.5,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Upload from PI Camera
-          </button>
-          <span
-            onClick={() => fileRef.current?.click()}
-            style={{ fontSize: 13, color: "#9991AC", cursor: "pointer" }}
-          >
-            or upload a file
-          </span>
+      {editing ? (
+        <>
           <input
-            ref={fileRef}
-            type="file"
-            accept="video/*,image/*,.pdf"
-            style={{ display: "none" }}
-            onChange={() => handleFileUpload("file")}
+            value={block.title}
+            onChange={(e) => store.updateBlock(block.id, { title: e.target.value })}
+            placeholder="Block title"
+            autoFocus
+            style={{ width: "100%", fontSize: m ? 18 : 21, fontWeight: 600, color: "#1A1035", border: "none", background: "transparent", fontFamily: "inherit", marginBottom: 8 }}
           />
-        </div>
+          <textarea
+            value={block.desc}
+            onChange={(e) => store.updateBlock(block.id, { desc: e.target.value })}
+            placeholder="Describe what this block shows…"
+            rows={2}
+            style={{ width: "100%", fontSize: 15, fontWeight: 300, color: "#6B6080", border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", lineHeight: 1.55, marginBottom: 16 }}
+          />
+          {!block.media ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 16px", border: "1px dashed rgba(26,16,53,0.14)", borderRadius: 9, flexWrap: "wrap" }}>
+              <CameraIcon size={22} color="#9991AC" />
+              <button
+                onClick={() => handleFileUpload("pi_camera")}
+                style={{ padding: "9px 16px", border: "1.5px solid #6B3FA0", borderRadius: 9, background: "transparent", color: "#6B3FA0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                Upload from PI Camera
+              </button>
+              <span onClick={() => fileRef.current?.click()} style={{ fontSize: 13, color: "#9991AC", cursor: "pointer" }}>
+                or upload a file
+              </span>
+              <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={() => handleFileUpload("file")} />
+            </div>
+          ) : (
+            <MediaDisplay block={block} onReplace={() => store.setBlockMedia(block.id, null)} />
+          )}
+        </>
       ) : (
-        <MediaDisplay block={block} onReplace={() => store.setBlockMedia(block.id, null)} />
+        /* Collapsed view */
+        <div>
+          <div style={{ fontSize: m ? 17 : 19, fontWeight: 600, color: "#1A1035", marginBottom: block.desc ? 4 : 0 }}>
+            {block.title || <span style={{ color: "#D8D2E2" }}>Untitled block</span>}
+          </div>
+          {block.desc && (
+            <div style={{ fontSize: 14, color: "#6B6080", lineHeight: 1.5, marginBottom: block.media ? 10 : 0 }}>
+              {block.desc}
+            </div>
+          )}
+          {block.media && <MediaDisplay block={block} onReplace={() => { store.setBlockMedia(block.id, null); setEditing(true); }} />}
+        </div>
       )}
     </div>
   );
@@ -639,20 +608,25 @@ function PiCamSection({ businessId, entityName }: { businessId: string | null; e
   const [qrData, setQrData] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+
+  const authToken = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
   async function handleConnect() {
     const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
-    if (!token) {
-      setError("Sign in first — complete the claim flow to get a verified account.");
-      return;
-    }
+    if (!token) { setShowLogin(true); return; }
     setLoading(true);
     setError(null);
     try {
       const data = await devices.generateToken(token);
       setQrData(JSON.stringify({ token: data.token, entity_id: data.entity_id, entity_name: data.entity_name }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not generate QR. Try again.");
+      const msg = e instanceof Error ? e.message : "Could not generate QR. Try again.";
+      if (msg.includes("401") || msg.includes("Unauthorized") || msg.includes("Not authenticated")) {
+        setShowLogin(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -660,34 +634,18 @@ function PiCamSection({ businessId, entityName }: { businessId: string | null; e
 
   return (
     <>
-      <div
-        style={{
-          marginTop: 40,
-          paddingTop: 28,
-          borderTop: "1px solid rgba(26,16,53,0.08)",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-            fontSize: 10.5,
-            letterSpacing: "1.4px",
-            textTransform: "uppercase",
-            color: "#9991AC",
-            marginBottom: 14,
-          }}
-        >
+      <div style={{ marginTop: 40, paddingTop: 28, borderTop: "1px solid rgba(26,16,53,0.08)" }}>
+        <div style={{
+          fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+          fontSize: 10.5, letterSpacing: "1.4px", textTransform: "uppercase",
+          color: "#9991AC", marginBottom: 14,
+        }}>
           Pi CAM
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 12,
-          }}
-        >
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexWrap: "wrap", gap: 12,
+        }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1035", marginBottom: 4 }}>
               Connect Pi CAM mobile app
@@ -695,44 +653,129 @@ function PiCamSection({ businessId, entityName }: { businessId: string | null; e
             <div style={{ fontSize: 13, color: "#9991AC", lineHeight: 1.5 }}>
               Scan QR in the Pi CAM app to link your camera. Photos will be C2PA-signed and uploaded automatically.
             </div>
+            {authToken && (
+              <div style={{ fontSize: 11, color: "#27AE60", marginTop: 6, fontWeight: 500 }}>
+                ✓ Signed in
+              </div>
+            )}
           </div>
           <button
             onClick={handleConnect}
             disabled={loading}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "10px 20px",
-              border: "1.5px solid #6B3FA0",
-              borderRadius: 10,
-              background: "transparent",
-              color: "#6B3FA0",
-              fontSize: 13.5,
-              fontWeight: 600,
-              cursor: loading ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-              opacity: loading ? 0.6 : 1,
-              whiteSpace: "nowrap",
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "10px 20px", border: "1.5px solid #6B3FA0", borderRadius: 10,
+              background: "transparent", color: "#6B3FA0", fontSize: 13.5, fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit",
+              opacity: loading ? 0.6 : 1, whiteSpace: "nowrap",
             }}
           >
             {loading ? <SpinnerIcon size={14} /> : <CameraIcon size={14} color="#6B3FA0" />}
             {loading ? "Generating…" : "Connect Pi CAM"}
           </button>
         </div>
-        {error && (
-          <div style={{ marginTop: 10, fontSize: 13, color: "#E8640C" }}>{error}</div>
-        )}
+        {error && <div style={{ marginTop: 10, fontSize: 13, color: "#E8640C" }}>{error}</div>}
       </div>
+
+      {showLogin && (
+        <SignInModal
+          onSuccess={(token) => {
+            localStorage.setItem("auth_token", token);
+            store.setAuthToken(token);
+            setShowLogin(false);
+            setError(null);
+          }}
+          onClose={() => setShowLogin(false)}
+        />
+      )}
 
       {qrData && (
         <PiCamModal
           qrData={qrData}
-          entityName={entityName}
+          entityName={entityName || "Pi CAM Test"}
           onClose={() => setQrData(null)}
         />
       )}
     </>
+  );
+}
+
+// ===== Sign-in modal =====
+function SignInModal({ onSuccess, onClose }: { onSuccess: (token: string) => void; onClose: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await authApi.login(email.trim(), password);
+      onSuccess(data.access_token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign in failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(26,16,53,0.55)",
+        backdropFilter: "blur(6px)", display: "flex", alignItems: "center",
+        justifyContent: "center", zIndex: 100, padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff", borderRadius: 18, padding: "32px 28px 28px",
+          maxWidth: 360, width: "100%", boxShadow: "0 24px 64px rgba(26,16,53,0.22)",
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#1A1035", marginBottom: 6 }}>
+          Sign in to TETA+PI
+        </div>
+        <div style={{ fontSize: 13, color: "#9991AC", marginBottom: 24 }}>
+          Required to generate a Pi CAM linking QR code.
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <input
+            type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email" required
+            style={{
+              padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(26,16,53,0.15)",
+              fontSize: 14, fontFamily: "inherit", color: "#1A1035", outline: "none",
+            }}
+          />
+          <input
+            type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password" required
+            style={{
+              padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(26,16,53,0.15)",
+              fontSize: 14, fontFamily: "inherit", color: "#1A1035", outline: "none",
+            }}
+          />
+          {error && <div style={{ fontSize: 13, color: "#E8640C" }}>{error}</div>}
+          <button
+            type="submit" disabled={loading}
+            style={{
+              marginTop: 4, padding: "12px", borderRadius: 10, border: "none",
+              background: loading ? "rgba(107,63,160,0.4)" : "#6B3FA0",
+              color: "#fff", fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer",
+              fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            {loading ? <SpinnerIcon size={14} /> : null}
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -858,11 +901,16 @@ function PiCamModal({
 // ===== Visitor View =====
 function VisitorView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
-  const level = store.nameStatus === "verified" ? "full" : "registry";
-  const accentColor = level === "full" ? "#6B3FA0" : "#B8B2C8";
-  const levelLabel = level === "full" ? "Full Verification" : "Registry Only";
-  const hash = level === "full" ? "#c2pa:verified · btc:ts:confirmed" : "#registry:attested";
-  const badges = level === "full" ? ["Registry", "C2PA Media", "Bitcoin TS"] : ["Registry"];
+  const isBusiness = store.entityKind === "business";
+  const hasC2pa = store.blocks.some((b) => b.media?.phase === "done" && b.media.source === "pi_camera");
+  const level = isBusiness
+    ? store.nameStatus === "verified" ? "registry" : "unverified"
+    : hasC2pa ? "full" : "email";
+  const accentColor = level === "full" ? "#6B3FA0" : level === "email" ? "#22B07D" : level === "registry" ? "#B8B2C8" : "#D8D2E2";
+  const levelLabel = level === "full" ? "Full Verification" : level === "email" ? "Email Verified" : level === "registry" ? "Registry Only" : "Unverified";
+  const badges = isBusiness
+    ? level === "registry" ? ["Registry"] : []
+    : level === "full" ? ["Email Verified", "C2PA Media", "Bitcoin TS"] : ["Email Verified"];
 
   return (
     <div>
@@ -961,29 +1009,33 @@ function VisitorView({ mobile: m }: { mobile: boolean }) {
 // ===== Agent View =====
 function AgentView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
+  const isBusiness = store.entityKind === "business";
 
   const trustLevel =
     store.blocks.some((b) => b.media?.phase === "done" && b.media.source === "pi_camera")
       ? "full"
       : store.blocks.some((b) => b.media?.phase === "done")
       ? "partial"
-      : store.nameStatus === "verified"
+      : isBusiness && store.nameStatus === "verified"
       ? "registry"
+      : !isBusiness
+      ? "email_verified"
       : "unverified";
 
   const json = {
-    business: {
+    entity: {
       id: store.businessId || "00000000-0000-0000-0000-000000000001",
-      name: store.companyName || "Business Name",
+      type: store.entityKind || "business",
+      name: store.companyName || "Name",
       description: store.description || null,
     },
-    registry: store.registryData
+    registry: isBusiness && store.registryData
       ? {
           status: "verified",
           registry: store.registryData.authority,
           number: store.registryData.registryId,
         }
-      : null,
+      : isBusiness ? null : { status: "self_asserted", method: "email" },
     trust_level: trustLevel,
     blocks: store.blocks.map((b) => ({
       title: b.title || "Untitled",
@@ -1030,7 +1082,7 @@ function AgentView({ mobile: m }: { mobile: boolean }) {
               fontWeight: 600,
             }}
           >
-            GET /v1/business/{store.businessId || "{slug}"}
+            GET /v1/entity/{store.businessId || "{slug}"}
           </span>
           <span
             style={{

@@ -240,7 +240,7 @@ export default function ClaimPage() {
   const heroPad = m ? "80px 24px 60px" : "0";
   const flowPad = m ? "80px 20px 60px" : "80px 40px 80px";
 
-  const STEP_LABELS = ["Identify", "Confirm", "Prove", "Account", "Publish"];
+  const STEP_LABELS = ["Identify", "Confirm", "Prove", "Camera", "Publish"];
 
   const trustChipLabel = store.proven
     ? "Control proven"
@@ -1773,6 +1773,7 @@ export default function ClaimPage() {
           onClick={() => {
             if (store.token) localStorage.setItem("auth_token", store.token);
             if (store.createdEntityId) localStorage.setItem("entity_id", store.createdEntityId);
+            if (store.entityKind) localStorage.setItem("entity_kind", store.entityKind);
           }}
           style={{
             display: "inline-flex",
