@@ -100,11 +100,17 @@ export default function ProfilePage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#fff",
-        fontFamily: "'Trebuchet MS','Segoe UI','Helvetica Neue',sans-serif",
+        background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)",
+        fontFamily: "'Manrope','Trebuchet MS','Segoe UI',sans-serif",
         color: "#1A1035",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
+      {/* Color washes */}
+      <div style={{ position: "absolute", top: -160, left: -130, width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,rgba(91,69,201,0.22),transparent 68%)", filter: "blur(34px)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: -180, right: -150, width: 560, height: 560, borderRadius: "50%", background: "radial-gradient(circle,rgba(245,154,46,0.18),transparent 68%)", filter: "blur(38px)", pointerEvents: "none" }} />
+
       {/* Corner logo */}
       <div style={{ position: "fixed", top: m ? 16 : 22, left: m ? 16 : 28, zIndex: 20 }}>
         <Wordmark size="sm" />
@@ -116,6 +122,7 @@ export default function ProfilePage() {
           maxWidth: 880,
           margin: "0 auto",
           padding: m ? "72px 16px 100px" : "80px 24px 100px",
+          position: "relative", zIndex: 1,
         }}
       >
         {store.view === "edit" && <EditView mobile={m} />}
@@ -133,10 +140,12 @@ export default function ProfilePage() {
           display: "flex",
           padding: "4px",
           gap: 2,
-          background: "rgba(107,63,160,0.04)",
-          border: "1px solid rgba(26,16,53,0.10)",
-          borderRadius: 12,
-          backdropFilter: "blur(8px)",
+          background: "rgba(255,255,255,0.55)",
+          border: "1px solid rgba(255,255,255,0.7)",
+          borderRadius: 14,
+          backdropFilter: "blur(14px) saturate(140%)",
+          WebkitBackdropFilter: "blur(14px) saturate(140%)",
+          boxShadow: "0 8px 26px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.9)",
           zIndex: 30,
         }}
       >
@@ -148,16 +157,17 @@ export default function ProfilePage() {
               onClick={() => store.setView(key)}
               style={{
                 padding: m ? "8px 12px" : "8px 16px",
-                borderRadius: 9,
+                borderRadius: 10,
                 border: "none",
-                background: active ? "#6B3FA0" : "transparent",
-                color: active ? "#fff" : "#6B6080",
+                background: active ? "linear-gradient(180deg,#6E58D6,#5B45C9)" : "transparent",
+                color: active ? "#fff" : "#5A4F78",
                 fontSize: m ? 12 : 13.5,
                 fontWeight: active ? 600 : 400,
                 cursor: "pointer",
                 fontFamily: "inherit",
                 transition: "all 0.16s",
                 whiteSpace: "nowrap",
+                boxShadow: active ? "0 3px 10px rgba(91,69,201,0.28)" : "none",
               }}
             >
               {label}
@@ -217,7 +227,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
             )}
             {store.nameStatus === "verified" && store.registryData && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#6B3FA0", fontSize: 13.5, fontWeight: 600 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#5B45C9", fontSize: 13.5, fontWeight: 600 }}>
                   <VerificationIcon size={16} />✓ Verified in registry
                 </div>
                 <IsoChip code={store.registryData.iso} />
@@ -228,13 +238,13 @@ function EditView({ mobile: m }: { mobile: boolean }) {
               </div>
             )}
             {store.nameStatus === "not_found" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#E8640C", fontSize: 13.5 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#F59A2E", fontSize: 13.5 }}>
                 ✗ Not found in connected registries
               </div>
             )}
           </>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#6B3FA0", fontSize: 13.5, fontWeight: 600 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#5B45C9", fontSize: 13.5, fontWeight: 600 }}>
             <VerificationIcon size={16} />✓ Email verified
             <span style={{ fontSize: 12, color: "#9991AC", fontWeight: 400 }}>· identity:self-asserted</span>
           </div>
@@ -252,9 +262,10 @@ function EditView({ mobile: m }: { mobile: boolean }) {
             disabled={saving}
             style={{
               padding: "7px 16px", borderRadius: 8,
-              background: saving ? "rgba(107,63,160,0.12)" : "#6B3FA0",
+              background: saving ? "rgba(91,69,201,0.12)" : "linear-gradient(180deg,#6E58D6,#5B45C9)",
               color: saving ? "#9991AC" : "#fff",
               fontSize: 13, fontWeight: 600, border: "none",
+              boxShadow: saving ? "none" : "0 4px 12px rgba(91,69,201,0.28)",
               cursor: saving ? "default" : "pointer", fontFamily: "inherit",
               display: "flex", alignItems: "center", gap: 6,
             }}
@@ -274,7 +285,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
           width: "100%",
           fontSize: 17,
           fontWeight: 300,
-          color: "#6B6080",
+          color: "#5A4F78",
           border: "none",
           background: "transparent",
           fontFamily: "inherit",
@@ -340,8 +351,8 @@ function EditView({ mobile: m }: { mobile: boolean }) {
             transition: "border-color 0.16s, background 0.16s",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "rgba(107,63,160,0.02)";
-            (e.currentTarget as HTMLElement).style.borderColor = "rgba(107,63,160,0.3)";
+            (e.currentTarget as HTMLElement).style.background = "rgba(91,69,201,0.02)";
+            (e.currentTarget as HTMLElement).style.borderColor = "rgba(91,69,201,0.3)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLElement).style.background = "transparent";
@@ -367,7 +378,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
             alignItems: "center",
             gap: 6,
             fontSize: 13.5,
-            color: "#6B3FA0",
+            color: "#5B45C9",
             cursor: "pointer",
             fontWeight: 600,
           }}
@@ -390,7 +401,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
 
   const accentColor =
     block.media?.phase === "done"
-      ? block.media.source === "pi_camera" ? "#6B3FA0" : "#E8640C"
+      ? block.media.source === "pi_camera" ? "#5B45C9" : "#F59A2E"
       : "rgba(26,16,53,0.10)";
 
   const handleFileUpload = useCallback(
@@ -425,12 +436,15 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
   return (
     <div
       style={{
-        border: "1px solid rgba(26,16,53,0.08)",
+        border: "1px solid rgba(255,255,255,0.7)",
         borderLeft: `3px solid ${accentColor}`,
         borderRadius: "0 13px 13px 0",
         padding: "18px 20px 16px 18px",
         marginBottom: 16,
-        background: "rgba(107,63,160,0.008)",
+        background: "rgba(255,255,255,0.45)",
+        backdropFilter: "blur(12px) saturate(130%)",
+        WebkitBackdropFilter: "blur(12px) saturate(130%)",
+        boxShadow: "0 6px 20px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
       }}
     >
       {/* Header row */}
@@ -448,7 +462,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
           {editing && (
             <span
               onClick={() => setEditing(false)}
-              style={{ fontSize: 12, color: "#6B3FA0", cursor: "pointer", fontWeight: 600, padding: "3px 8px", border: "1.5px solid #6B3FA0", borderRadius: 6 }}
+              style={{ fontSize: 12, color: "#5B45C9", cursor: "pointer", fontWeight: 600, padding: "3px 8px", border: "1px solid rgba(91,69,201,0.35)", borderRadius: 6, background: "rgba(91,69,201,0.06)" }}
             >
               Done
             </span>
@@ -471,7 +485,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
             onChange={(e) => store.updateBlock(block.id, { desc: e.target.value })}
             placeholder="Describe what this block shows…"
             rows={2}
-            style={{ width: "100%", fontSize: 15, fontWeight: 300, color: "#6B6080", border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", lineHeight: 1.55, marginBottom: 16 }}
+            style={{ width: "100%", fontSize: 15, fontWeight: 300, color: "#5A4F78", border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", lineHeight: 1.55, marginBottom: 16 }}
           />
           {!block.media ? (
             <div>
@@ -479,7 +493,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
                 <CameraIcon size={22} color="#9991AC" />
                 <button
                   onClick={() => handleFileUpload("pi_camera")}
-                  style={{ padding: "9px 16px", border: "1.5px solid #6B3FA0", borderRadius: 9, background: "transparent", color: "#6B3FA0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  style={{ padding: "9px 16px", border: "1px solid rgba(91,69,201,0.3)", borderRadius: 9, background: "rgba(91,69,201,0.06)", color: "#5B45C9", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
                 >
                   Upload from PI Camera
                 </button>
@@ -488,7 +502,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
                 </span>
                 <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload("file", f); }} />
               </div>
-              {uploadError && <div style={{ fontSize: 12, color: "#E8640C", marginTop: 6 }}>{uploadError}</div>}
+              {uploadError && <div style={{ fontSize: 12, color: "#F59A2E", marginTop: 6 }}>{uploadError}</div>}
             </div>
           ) : (
             <MediaDisplay block={block} onReplace={() => store.setBlockMedia(block.id, null)} />
@@ -501,7 +515,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
             {block.title || <span style={{ color: "#D8D2E2" }}>Untitled block</span>}
           </div>
           {block.desc && (
-            <div style={{ fontSize: 14, color: "#6B6080", lineHeight: 1.5, marginBottom: block.media ? 10 : 0 }}>
+            <div style={{ fontSize: 14, color: "#5A4F78", lineHeight: 1.5, marginBottom: block.media ? 10 : 0 }}>
               {block.desc}
             </div>
           )}
@@ -523,7 +537,7 @@ function MediaDisplay({
   const isCamera = media.source === "pi_camera";
   const isDone = media.phase === "done";
 
-  const accentColor = isDone ? (isCamera ? "#6B3FA0" : "#E8640C") : "#9991AC";
+  const accentColor = isDone ? (isCamera ? "#5B45C9" : "#F59A2E") : "#9991AC";
   const hash = isDone
     ? isCamera
       ? "#c2pa:verified · btc:ts:confirmed"
@@ -539,7 +553,7 @@ function MediaDisplay({
           borderRadius: 9,
           position: "relative",
           overflow: "hidden",
-          background: "repeating-linear-gradient(135deg, rgba(107,63,160,0.04) 0px, rgba(107,63,160,0.04) 8px, transparent 8px, transparent 16px)",
+          background: "repeating-linear-gradient(135deg, rgba(91,69,201,0.04) 0px, rgba(91,69,201,0.04) 8px, transparent 8px, transparent 16px)",
           border: "1px solid rgba(26,16,53,0.08)",
           marginBottom: 10,
         }}
@@ -560,7 +574,7 @@ function MediaDisplay({
               borderRadius: 20,
               fontSize: 11,
               fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-              color: "#6B3FA0",
+              color: "#5B45C9",
               letterSpacing: "0.3px",
             }}
           >
@@ -580,8 +594,8 @@ function MediaDisplay({
             </div>
           )}
           {media.phase === "timestamping" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#E8640C", fontSize: 13 }}>
-              <SpinnerIcon size={14} color="#E8640C" />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#F59A2E", fontSize: 13 }}>
+              <SpinnerIcon size={14} color="#F59A2E" />
               Timestamping on Bitcoin…
             </div>
           )}
@@ -686,17 +700,18 @@ function PiCamSection({ businessId, entityName }: { businessId: string | null; e
             disabled={loading}
             style={{
               display: "flex", alignItems: "center", gap: 8,
-              padding: "10px 20px", border: "1.5px solid #6B3FA0", borderRadius: 10,
-              background: "transparent", color: "#6B3FA0", fontSize: 13.5, fontWeight: 600,
+              padding: "10px 20px",
+              border: "1px solid rgba(91,69,201,0.3)", borderRadius: 10,
+              background: "rgba(91,69,201,0.06)", color: "#5B45C9", fontSize: 13.5, fontWeight: 600,
               cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit",
               opacity: loading ? 0.6 : 1, whiteSpace: "nowrap",
             }}
           >
-            {loading ? <SpinnerIcon size={14} /> : <CameraIcon size={14} color="#6B3FA0" />}
+            {loading ? <SpinnerIcon size={14} /> : <CameraIcon size={14} color="#5B45C9" />}
             {loading ? "Generating…" : "Connect Pi CAM"}
           </button>
         </div>
-        {error && <div style={{ marginTop: 10, fontSize: 13, color: "#E8640C" }}>{error}</div>}
+        {error && <div style={{ marginTop: 10, fontSize: 13, color: "#F59A2E" }}>{error}</div>}
       </div>
 
       {showLogin && (
@@ -755,8 +770,11 @@ function SignInModal({ onSuccess, onClose }: { onSuccess: (token: string) => voi
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#fff", borderRadius: 18, padding: "32px 28px 28px",
-          maxWidth: 360, width: "100%", boxShadow: "0 24px 64px rgba(26,16,53,0.22)",
+          background: "rgba(255,255,255,0.85)", borderRadius: 18, padding: "32px 28px 28px",
+          maxWidth: 360, width: "100%",
+          boxShadow: "0 24px 64px rgba(45,55,120,0.20), inset 0 1px 0 rgba(255,255,255,0.9)",
+          backdropFilter: "blur(20px) saturate(140%)",
+          WebkitBackdropFilter: "blur(20px) saturate(140%)",
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 700, color: "#1A1035", marginBottom: 6 }}>
@@ -782,12 +800,12 @@ function SignInModal({ onSuccess, onClose }: { onSuccess: (token: string) => voi
               fontSize: 14, fontFamily: "inherit", color: "#1A1035", outline: "none",
             }}
           />
-          {error && <div style={{ fontSize: 13, color: "#E8640C" }}>{error}</div>}
+          {error && <div style={{ fontSize: 13, color: "#F59A2E" }}>{error}</div>}
           <button
             type="submit" disabled={loading}
             style={{
               marginTop: 4, padding: "12px", borderRadius: 10, border: "none",
-              background: loading ? "rgba(107,63,160,0.4)" : "#6B3FA0",
+              background: loading ? "rgba(91,69,201,0.4)" : "linear-gradient(180deg,#6E58D6,#5B45C9)",
               color: "#fff", fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer",
               fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             }}
@@ -843,13 +861,15 @@ function PiCamModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#fff",
+          background: "rgba(255,255,255,0.85)",
           borderRadius: 18,
           padding: "32px 28px 28px",
           maxWidth: 340,
           width: "100%",
           textAlign: "center",
-          boxShadow: "0 24px 64px rgba(26,16,53,0.22)",
+          boxShadow: "0 24px 64px rgba(45,55,120,0.20), inset 0 1px 0 rgba(255,255,255,0.9)",
+          backdropFilter: "blur(20px) saturate(140%)",
+          WebkitBackdropFilter: "blur(20px) saturate(140%)",
         }}
       >
         <div style={{ fontSize: 17, fontWeight: 600, color: "#1A1035", marginBottom: 4 }}>
@@ -860,7 +880,7 @@ function PiCamModal({
           <span
             style={{
               fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-              color: secondsLeft < 60 ? "#E8640C" : "#6B3FA0",
+              color: secondsLeft < 60 ? "#F59A2E" : "#5B45C9",
             }}
           >
             {mm}:{ss}
@@ -928,7 +948,7 @@ function VisitorView({ mobile: m }: { mobile: boolean }) {
   const level = isBusiness
     ? store.nameStatus === "verified" ? "registry" : "unverified"
     : hasC2pa ? "full" : "email";
-  const accentColor = level === "full" ? "#6B3FA0" : level === "email" ? "#22B07D" : level === "registry" ? "#B8B2C8" : "#D8D2E2";
+  const accentColor = level === "full" ? "#5B45C9" : level === "email" ? "#5B45C9" : level === "registry" ? "#B8B2C8" : "#D8D2E2";
   const levelLabel = level === "full" ? "Full Verification" : level === "email" ? "Email Verified" : level === "registry" ? "Registry Only" : "Unverified";
   const badges = isBusiness
     ? level === "registry" ? ["Registry"] : []
@@ -964,7 +984,7 @@ function VisitorView({ mobile: m }: { mobile: boolean }) {
       <div
         style={{
           fontSize: 16,
-          color: "#6B6080",
+          color: "#5A4F78",
           lineHeight: 1.6,
           marginBottom: 32,
           fontWeight: 300,
@@ -980,8 +1000,8 @@ function VisitorView({ mobile: m }: { mobile: boolean }) {
             borderLeft: `3px solid ${
               block.media?.phase === "done"
                 ? block.media.source === "pi_camera"
-                  ? "#6B3FA0"
-                  : "#E8640C"
+                  ? "#5B45C9"
+                  : "#F59A2E"
                 : "rgba(26,16,53,0.10)"
             }`,
             borderRadius: "0 11px 11px 0",
@@ -993,7 +1013,7 @@ function VisitorView({ mobile: m }: { mobile: boolean }) {
           <div style={{ fontSize: 19, fontWeight: 600, marginBottom: 6 }}>
             {block.title || "Untitled block"}
           </div>
-          <div style={{ fontSize: 14.5, color: "#6B6080", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 14.5, color: "#5A4F78", lineHeight: 1.5 }}>
             {block.desc || "—"}
           </div>
           {block.media?.phase === "done" && (
@@ -1003,7 +1023,7 @@ function VisitorView({ mobile: m }: { mobile: boolean }) {
                 marginTop: 12,
                 borderRadius: 9,
                 background:
-                  "repeating-linear-gradient(135deg, rgba(107,63,160,0.04) 0px, rgba(107,63,160,0.04) 8px, transparent 8px, transparent 16px)",
+                  "repeating-linear-gradient(135deg, rgba(91,69,201,0.04) 0px, rgba(91,69,201,0.04) 8px, transparent 8px, transparent 16px)",
                 border: "1px solid rgba(26,16,53,0.06)",
               }}
             />
@@ -1080,9 +1100,12 @@ function AgentView({ mobile: m }: { mobile: boolean }) {
       <div
         style={{
           padding: "20px 22px",
-          border: "1px solid rgba(26,16,53,0.10)",
+          border: "1px solid rgba(255,255,255,0.7)",
           borderRadius: 13,
-          background: "rgba(107,63,160,0.015)",
+          background: "rgba(255,255,255,0.45)",
+          backdropFilter: "blur(12px) saturate(130%)",
+          WebkitBackdropFilter: "blur(12px) saturate(130%)",
+          boxShadow: "0 6px 20px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
           marginBottom: 20,
         }}
       >
@@ -1100,7 +1123,7 @@ function AgentView({ mobile: m }: { mobile: boolean }) {
             style={{
               fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
               fontSize: 12.5,
-              color: "#6B3FA0",
+              color: "#5B45C9",
               fontWeight: 600,
             }}
           >
