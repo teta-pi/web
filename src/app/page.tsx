@@ -288,17 +288,17 @@ export default function SearchPage() {
                 flexWrap: "wrap", fontSize: 13, color: "#5A4F78",
               }}>
                 <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                  <a href={process.env.NEXT_PUBLIC_LANDING_URL ?? "/"} style={{ color: "#5A4F78", textDecoration: "none" }}>About</a>
-                  {["Registries", "For Agents"].map((l) => (
-                    <span key={l} style={{ cursor: "pointer" }}>{l}</span>
-                  ))}
-                  <Link href="/claim" style={{ color: "#5A4F78", textDecoration: "none" }}>For Businesses</Link>
-                  <span style={{ cursor: "pointer" }}>How Verification Works</span>
+                  <a href="https://tetapi.dev/about.html" style={{ color: "#5A4F78", textDecoration: "none" }}>About</a>
+                  <a href="https://tetapi.dev/registries.html" style={{ color: "#5A4F78", textDecoration: "none" }}>Registries</a>
+                  <a href="https://tetapi.dev/for-agents.html" style={{ color: "#5A4F78", textDecoration: "none" }}>For Agents</a>
+                  <a href="https://tetapi.dev/for-businesses.html" style={{ color: "#5A4F78", textDecoration: "none" }}>For Businesses</a>
+                  <a href="https://tetapi.dev/how-it-works.html" style={{ color: "#5A4F78", textDecoration: "none" }}>How Verification Works</a>
                 </div>
                 <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                  {["Privacy", "Terms", "API", "Settings"].map((l) => (
-                    <span key={l} style={{ cursor: "pointer" }}>{l}</span>
-                  ))}
+                  <a href="https://tetapi.dev/privacy.html" style={{ color: "#5A4F78", textDecoration: "none" }}>Privacy</a>
+                  <a href="https://tetapi.dev/terms.html" style={{ color: "#5A4F78", textDecoration: "none" }}>Terms</a>
+                  <a href="https://api.tetapi.dev/docs" style={{ color: "#5A4F78", textDecoration: "none" }}>API</a>
+                  <Link href="/settings" style={{ color: "#5A4F78", textDecoration: "none" }}>Settings</Link>
                 </div>
               </div>
             </footer>
