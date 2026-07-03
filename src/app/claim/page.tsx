@@ -614,10 +614,9 @@ export default function ClaimPage() {
                     onClick={async () => {
                       setEmailVerifyLoading(true); setEmailVerifyError("");
                       try {
-                        const res = await authApi.magicLink(emailVerifyInput.trim());
+                        await authApi.sendEmailCode(emailVerifyInput.trim());
                         store.setAccountEmail(emailVerifyInput.trim());
-                        if (res.dev_token) { store.setToken(res.dev_token); store.setAuthed(true); store.setStep(4); }
-                        else { setEmailCodeSent(true); }
+                        setEmailCodeSent(true);
                       } catch { setEmailVerifyError("Couldn't send code — check your email and try again."); }
                       finally { setEmailVerifyLoading(false); }
                     }}
@@ -648,18 +647,14 @@ export default function ClaimPage() {
                       onClick={async () => {
                         setEmailVerifyLoading(true); setEmailVerifyError("");
                         try {
-                          const user = await authApi.register(emailVerifyInput.trim());
-                          if (user) {
-                            const loginRes = await authApi.magicLink(emailVerifyInput.trim());
-                            if (loginRes.dev_token) store.setToken(loginRes.dev_token);
-                          }
+                          const res = await authApi.verifyCode(emailVerifyInput.trim(), emailCode);
+                          store.setToken(res.access_token);
                           store.setAuthed(true); store.setStep(4);
-                        } catch {
-                          try {
-                            const loginRes = await authApi.magicLink(emailVerifyInput.trim());
-                            if (loginRes.dev_token) store.setToken(loginRes.dev_token);
-                            store.setAuthed(true); store.setStep(4);
-                          } catch { setEmailVerifyError("Verification failed — please try again."); }
+                        } catch (err) {
+                          const msg = err instanceof Error ? err.message : "";
+                          setEmailVerifyError(
+                            msg.includes("Too many") ? "Too many attempts — request a new code." : "Wrong or expired code — try again."
+                          );
                         } finally { setEmailVerifyLoading(false); }
                       }}
                       style={{ padding: "10px 20px" }}
@@ -896,50 +891,96 @@ export default function ClaimPage() {
                       <div style={{ flex: 1, height: 1, background: "rgba(26,16,53,0.08)" }} />
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 18px", border: "1px solid rgba(26,16,53,0.14)", borderRadius: 11 }}>
-                      <MailIcon size={18} />
-                      <input
-                        value={emailInput}
-                        onChange={(e) => setEmailInput(e.target.value)}
-                        placeholder="you@company.com"
-                        type="email"
-                        style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontSize: 15, color: TEXT, fontFamily: "inherit" }}
-                      />
-                    </div>
+                    {!emailCodeSent ? (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 18px", border: "1px solid rgba(26,16,53,0.14)", borderRadius: 11 }}>
+                          <MailIcon size={18} />
+                          <input
+                            value={emailInput}
+                            onChange={(e) => setEmailInput(e.target.value)}
+                            placeholder="you@company.com"
+                            type="email"
+                            style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontSize: 15, color: TEXT, fontFamily: "inherit" }}
+                          />
+                        </div>
 
-                    <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: TEXT_SEC, lineHeight: 1.5, cursor: "pointer", padding: "2px 2px 0" }}>
-                      <input
-                        type="checkbox"
-                        checked={readyToPay}
-                        onChange={(e) => setReadyToPay(e.target.checked)}
-                        style={{ marginTop: 2, width: 15, height: 15, accentColor: INDIGO }}
-                      />
-                      <span>I&apos;m ready to pay <strong>$21</strong> when billing launches — lock my founding price.</span>
-                    </label>
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: TEXT_SEC, lineHeight: 1.5, cursor: "pointer", padding: "2px 2px 0" }}>
+                          <input
+                            type="checkbox"
+                            checked={readyToPay}
+                            onChange={(e) => setReadyToPay(e.target.checked)}
+                            style={{ marginTop: 2, width: 15, height: 15, accentColor: INDIGO }}
+                          />
+                          <span>I&apos;m ready to pay <strong>$21</strong> when billing launches — lock my founding price.</span>
+                        </label>
 
-                    {emailVerifyError && <div style={{ color: SUN, fontSize: 13 }}>{emailVerifyError}</div>}
+                        {emailVerifyError && <div style={{ color: SUN, fontSize: 13 }}>{emailVerifyError}</div>}
 
-                    <BtnPrimary
-                      disabled={!emailInput.includes("@") || emailVerifyLoading}
-                      style={{ width: "100%", textAlign: "center" }}
-                      onClick={async () => {
-                        if (!emailInput.includes("@")) return;
-                        setEmailVerifyLoading(true); setEmailVerifyError("");
-                        try {
-                          const res = await authApi.magicLink(emailInput.trim());
-                          store.setAccountEmail(emailInput.trim());
-                          if (res.dev_token) { store.setToken(res.dev_token); store.setAuthed(true); }
-                          else { store.setAuthed(true); }
-                        } catch { setEmailVerifyError("Could not send email — try again."); }
-                        finally { setEmailVerifyLoading(false); }
-                      }}
-                    >
-                      {emailVerifyLoading ? <><SpinnerIcon size={15} /> Sending…</> : "Continue with email →"}
-                    </BtnPrimary>
+                        <BtnPrimary
+                          disabled={!emailInput.includes("@") || emailVerifyLoading}
+                          style={{ width: "100%", textAlign: "center" }}
+                          onClick={async () => {
+                            if (!emailInput.includes("@")) return;
+                            setEmailVerifyLoading(true); setEmailVerifyError("");
+                            try {
+                              await authApi.sendEmailCode(emailInput.trim());
+                              store.setAccountEmail(emailInput.trim());
+                              setEmailCodeSent(true);
+                            } catch { setEmailVerifyError("Could not send email — try again."); }
+                            finally { setEmailVerifyLoading(false); }
+                          }}
+                        >
+                          {emailVerifyLoading ? <><SpinnerIcon size={15} /> Sending…</> : "Continue with email →"}
+                        </BtnPrimary>
 
-                    <div style={{ fontSize: 11.5, color: MUTED, textAlign: "center", marginTop: 2 }}>
-                      We&apos;ll send a magic link — no password.
-                    </div>
+                        <div style={{ fontSize: 11.5, color: MUTED, textAlign: "center", marginTop: 2 }}>
+                          We&apos;ll send a 6-digit code — no password.
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 13.5, color: TEXT_SEC }}>
+                          Code sent to <strong>{emailInput}</strong>
+                        </div>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <input
+                            value={emailCode}
+                            onChange={(e) => { setEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setEmailVerifyError(""); }}
+                            placeholder="· · · · · ·"
+                            maxLength={6}
+                            style={{
+                              width: 160, fontFamily: "ui-monospace,'SF Mono','Menlo',monospace",
+                              fontSize: 22, letterSpacing: "8px", padding: "10px 14px",
+                              border: "1px solid rgba(26,16,53,0.12)", borderRadius: 9,
+                              background: "transparent", color: TEXT,
+                            }}
+                          />
+                          <BtnPrimary
+                            disabled={emailCode.length < 6 || emailVerifyLoading}
+                            style={{ padding: "10px 20px" }}
+                            onClick={async () => {
+                              setEmailVerifyLoading(true); setEmailVerifyError("");
+                              try {
+                                const res = await authApi.verifyCode(emailInput.trim(), emailCode);
+                                store.setToken(res.access_token);
+                                store.setAuthed(true);
+                              } catch (err) {
+                                const msg = err instanceof Error ? err.message : "";
+                                setEmailVerifyError(
+                                  msg.includes("Too many") ? "Too many attempts — request a new code." : "Wrong or expired code — try again."
+                                );
+                              } finally { setEmailVerifyLoading(false); }
+                            }}
+                          >
+                            {emailVerifyLoading ? <><SpinnerIcon size={14} /> Checking…</> : "Verify →"}
+                          </BtnPrimary>
+                        </div>
+                        {emailVerifyError && <div style={{ color: SUN, fontSize: 13 }}>{emailVerifyError}</div>}
+                        <span onClick={() => { setEmailCodeSent(false); setEmailCode(""); }} style={{ fontSize: 13, color: MUTED, cursor: "pointer" }}>
+                          Resend or change email
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   <div style={{

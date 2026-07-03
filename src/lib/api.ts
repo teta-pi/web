@@ -51,6 +51,18 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ email }),
     }),
+
+  sendEmailCode: (email: string): Promise<{ message: string }> =>
+    request("/auth/email-code", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  verifyCode: (email: string, code: string): Promise<AuthToken> =>
+    request("/auth/verify-code", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    }),
 };
 
 // Claims — /claim IS the waitlist (LandingSpec v2.1 §02)
