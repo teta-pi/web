@@ -4,9 +4,9 @@ export async function GET() {
   return Response.json(
     {
       name: "TETA+PI Verification Protocol",
-      version: "1.0",
+      version: "1.1.0",
       description:
-        "Trust infrastructure for the agent economy — universal verification of businesses, journalists, artists, and organizations via official registries, C2PA-signed media, and Bitcoin OpenTimestamps.",
+        "Trust infrastructure for digital entities — universal verification of people, companies, APIs, AI models, MCP servers, and agents via official registries, C2PA-signed media, and Bitcoin OpenTimestamps.",
       mcp_endpoint: "https://mcp.tetapi.dev",
       api_endpoint: "https://api.tetapi.dev/api/v1",
       capabilities: [
@@ -16,14 +16,28 @@ export async function GET() {
         "c2pa_media_verification",
         "bitcoin_timestamping",
       ],
-      entity_types: ["business", "person", "organization"],
+      entity_types: [
+        "person",
+        "business",
+        "organization",
+        "brand",
+        "domain",
+        "website",
+        "api",
+        "ai_model",
+        "mcp_server",
+        "software",
+        "repository",
+        "ai_agent",
+      ],
       verification_levels: ["registry_attested", "c2pa_verified", "btc_confirmed"],
       mcp_tools: [
         "teta_search",
         "teta_verify_entity",
-        "teta_verify_claim",
-        "teta_get_proof",
         "teta_verify_endpoint",
+        "teta_get_proof",
+        "teta_resolve_intent",
+        "teta_get_profile",
       ],
       registries: [
         "GLEIF (global)",
