@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TETA+PI — Trust Infrastructure for the Agent Economy",
+  title: "TETA+PI — Trust Infrastructure for Digital Entities",
   description:
     "Verified businesses, journalists, and artists for the agent economy. Search entities verified through official registries and C2PA-signed media.",
 };
