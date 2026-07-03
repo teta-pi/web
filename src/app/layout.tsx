@@ -22,7 +22,14 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <script
+          data-goatcounter="https://stats.tetapi.dev/count"
+          async
+          src="https://stats.tetapi.dev/count.js"
+        ></script>
+      </body>
     </html>
   );
 }
