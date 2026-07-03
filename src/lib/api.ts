@@ -53,6 +53,35 @@ export const authApi = {
     }),
 };
 
+// Claims — /claim IS the waitlist (LandingSpec v2.1 §02)
+export const claimApi = {
+  // 201 and 409 both return { position } — duplicate email is idempotent
+  create: async (
+    email: string,
+    entityType: "business" | "journalist" | "creator" | "developer" | "other",
+    readyToPay: boolean,
+    source?: Record<string, string | null>
+  ): Promise<{ position: number }> => {
+    const res = await fetch(`${API_BASE}/api/v1/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        entity_type: entityType,
+        ready_to_pay: readyToPay,
+        source: source ?? null,
+      }),
+    });
+    if (res.status !== 201 && res.status !== 409) {
+      throw new Error(`claim failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  stats: (): Promise<{ total: number; pay_ready: number; pay_ready_pct: number }> =>
+    request("/claim/stats"),
+};
+
 // Search
 export const searchApi = {
   search: (

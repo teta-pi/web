@@ -12,7 +12,7 @@ import {
   type RegistryEntity,
   type EntityKind,
 } from "@/stores/useOnboardingStore";
-import { searchApi, authApi, businessApi } from "@/lib/api";
+import { searchApi, authApi, businessApi, claimApi } from "@/lib/api";
 
 /* ── Design tokens ── */
 const INDIGO = "#5B45C9";
@@ -224,10 +224,27 @@ export default function ClaimPage() {
   const [emailVerifyError, setEmailVerifyError] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [readyToPay, setReadyToPay] = useState(false);
+  const claimSubmittedRef = useRef(false);
 
   const isBusiness = store.entityKind === "business";
 
   useEffect(() => { if (store.step !== 1) setNameUnique("idle"); }, [store.step]);
+
+  // Register the claim in the waitlist once the user is authed (idempotent on email)
+  useEffect(() => {
+    if (!store.authed || !store.accountEmail || claimSubmittedRef.current) return;
+    claimSubmittedRef.current = true;
+    const kindMap: Record<string, "business" | "journalist" | "creator" | "developer" | "other"> = {
+      business: "business", journalist: "journalist", artist: "creator", organization: "other",
+    };
+    claimApi
+      .create(store.accountEmail, kindMap[store.entityKind ?? "business"] ?? "other", readyToPay, {
+        referrer: typeof document !== "undefined" ? document.referrer || null : null,
+      })
+      .catch(() => { claimSubmittedRef.current = false; });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.authed, store.accountEmail]);
 
   useEffect(() => {
     if (!store.authed || !store.token || !store.entity || store.createdEntityId) return;
@@ -581,6 +598,15 @@ export default function ClaimPage() {
                       fontFamily: "inherit", marginBottom: 14, boxSizing: "border-box",
                     }}
                   />
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: TEXT_SEC, lineHeight: 1.5, cursor: "pointer", marginBottom: 14 }}>
+                    <input
+                      type="checkbox"
+                      checked={readyToPay}
+                      onChange={(e) => setReadyToPay(e.target.checked)}
+                      style={{ marginTop: 2, width: 15, height: 15, accentColor: INDIGO }}
+                    />
+                    <span>I&apos;m ready to pay <strong>$21</strong> when billing launches — lock my founding price.</span>
+                  </label>
                   {emailVerifyError && <div style={{ color: SUN, fontSize: 13, marginBottom: 10 }}>{emailVerifyError}</div>}
                   <BtnPrimary
                     disabled={!emailVerifyInput.includes("@") || emailVerifyLoading}
@@ -880,6 +906,16 @@ export default function ClaimPage() {
                         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontSize: 15, color: TEXT, fontFamily: "inherit" }}
                       />
                     </div>
+
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: TEXT_SEC, lineHeight: 1.5, cursor: "pointer", padding: "2px 2px 0" }}>
+                      <input
+                        type="checkbox"
+                        checked={readyToPay}
+                        onChange={(e) => setReadyToPay(e.target.checked)}
+                        style={{ marginTop: 2, width: 15, height: 15, accentColor: INDIGO }}
+                      />
+                      <span>I&apos;m ready to pay <strong>$21</strong> when billing launches — lock my founding price.</span>
+                    </label>
 
                     {emailVerifyError && <div style={{ color: SUN, fontSize: 13 }}>{emailVerifyError}</div>}
 
