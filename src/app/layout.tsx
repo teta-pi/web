@@ -23,6 +23,25 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <div
+          style={{
+            position: "relative",
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            padding: "8px 16px",
+            background: "#FFD60A",
+            color: "#1A1035",
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            textAlign: "center",
+          }}
+        >
+          🚧 Project under construction — we are building in public. Features ship daily.
+        </div>
         {children}
         <script
           data-goatcounter="https://stats.tetapi.dev/count"
