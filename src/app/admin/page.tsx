@@ -273,19 +273,71 @@ function UsersTab({ token }: { token: string }) {
       </table>
       {data && <Pager total={data.total} offset={offset} onOffset={setOffset} />}
 
-      {detail && <UserDetailPanel detail={detail} onClose={() => setDetail(null)} />}
+      {detail && <UserDetailPanel token={token} detail={detail} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load(); }} />}
     </div>
   );
 }
 
-function UserDetailPanel({ detail, onClose }: { detail: AdminUserDetail; onClose: () => void }) {
+function UserDetailPanel({ token, detail, onClose, onChanged }: { token: string; detail: AdminUserDetail; onClose: () => void; onChanged: () => void }) {
   const u = detail.user;
+  const [flags, setFlags] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState("");
+
+  useEffect(() => {
+    adminApi.userFlags(token, u.id).then((r) => setFlags(r.flags)).catch(() => setFlags([]));
+  }, [token, u.id]);
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(26,16,53,0.35)", backdropFilter: "blur(4px)", display: "flex", justifyContent: "flex-end" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(560px,100%)", height: "100%", overflowY: "auto", background: "#F6F5FC", padding: "28px 28px 60px", boxShadow: "-16px 0 50px rgba(26,16,53,0.25)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>{u.email}</div>
           <button onClick={onClose} style={{ fontSize: 20, background: "none", border: "none", cursor: "pointer", color: TEXT }}>×</button>
+        </div>
+
+        {/* Suspicion flags */}
+        {flags && flags.length > 0 && (
+          <div style={{ background: "rgba(245,154,46,0.12)", border: "1px solid rgba(245,154,46,0.4)", borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#B06A10", marginBottom: 4 }}>⚠ Flags</div>
+            {flags.map((f) => <div key={f} style={{ fontSize: 12.5, color: "#7A4A0C", fontFamily: "ui-monospace,monospace" }}>{f}</div>)}
+          </div>
+        )}
+
+        {/* GDPR actions */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button
+            disabled={busy !== ""}
+            onClick={async () => {
+              setBusy("export");
+              try {
+                const data = await adminApi.exportUser(token, u.id);
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `tetapi-user-${u.id.slice(0, 8)}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+              } finally { setBusy(""); }
+            }}
+            style={{ fontSize: 12.5, fontWeight: 600, padding: "8px 14px", borderRadius: 10, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            {busy === "export" ? "Exporting…" : "⬇ GDPR export"}
+          </button>
+          {u.role !== "admin" && (
+            <button
+              disabled={busy !== ""}
+              onClick={async () => {
+                if (!confirm(`Anonymize ${u.email}? PII is wiped, entities unpublished. This cannot be undone.`)) return;
+                setBusy("anon");
+                try { await adminApi.anonymizeUser(token, u.id); onChanged(); }
+                catch { alert("Anonymize failed"); }
+                finally { setBusy(""); }
+              }}
+              style={{ fontSize: 12.5, fontWeight: 600, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(176,69,69,0.35)", background: "rgba(176,69,69,0.07)", color: "#B04545", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              {busy === "anon" ? "Anonymizing…" : "✕ Anonymize (GDPR)"}
+            </button>
+          )}
         </div>
 
         <div style={{ ...glass, padding: 18, marginBottom: 16 }}>
@@ -372,10 +424,12 @@ function EntitiesTab({ token }: { token: string }) {
   const [data, setData] = useState<{ total: number; results: AdminEntity[] } | null>(null);
   const [offset, setOffset] = useState(0);
   const [q, setQ] = useState("");
+  const [validating, setValidating] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     adminApi.entities(token, { q: q || undefined, offset }).then(setData).catch(() => {});
   }, [token, q, offset]);
+  useEffect(load, [load]);
 
   return (
     <div style={{ ...glass, overflow: "hidden" }}>
@@ -384,7 +438,7 @@ function EntitiesTab({ token }: { token: string }) {
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
         <thead><tr>
-          <th style={th}>Name</th><th style={th}>Type</th><th style={th}>Level</th><th style={th}>Registry</th><th style={th}>Owner</th><th style={th}>T / P</th><th style={th}>Created</th>
+          <th style={th}>Name</th><th style={th}>Type</th><th style={th}>Level</th><th style={th}>Registry</th><th style={th}>Owner</th><th style={th}>T / P</th><th style={th}>Created</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {data?.results.map((e) => (
@@ -396,10 +450,27 @@ function EntitiesTab({ token }: { token: string }) {
               <td style={{ ...td, fontSize: 12.5 }}>{e.owner_email ?? "—"}</td>
               <td style={{ ...td, fontFamily: "ui-monospace,monospace", fontSize: 12 }}>{(e.t_score ?? 0).toFixed(2)} / {(e.p_score ?? 0).toFixed(2)}</td>
               <td style={td}>{fmtDate(e.created_at)}</td>
+              <td style={td}>
+                <button
+                  disabled={validating === e.id}
+                  onClick={async () => {
+                    setValidating(e.id);
+                    try {
+                      const r = await adminApi.validateEntity(token, e.id);
+                      alert(r.status === "confirmed" ? `✓ Confirmed in registry (${r.matches} match)` : "⚠ Not found in any registry");
+                      load();
+                    } catch { alert("Validation failed"); }
+                    finally { setValidating(null); }
+                  }}
+                  style={{ fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 9, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                >
+                  {validating === e.id ? "…" : "Validate"}
+                </button>
+              </td>
             </tr>
           ))}
           {data && data.results.length === 0 && (
-            <tr><td style={{ ...td, color: MUTED }} colSpan={7}>No entities found.</td></tr>
+            <tr><td style={{ ...td, color: MUTED }} colSpan={8}>No entities found.</td></tr>
           )}
         </tbody>
       </table>

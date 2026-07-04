@@ -131,6 +131,18 @@ export const adminApi = {
     if (params.offset) qs.set("offset", String(params.offset));
     return request<{ total: number; results: AdminAuditEntry[] }>(`/admin/audit-log?${qs}`, {}, token);
   },
+
+  exportUser: (token: string, id: string) =>
+    request<Record<string, unknown>>(`/admin/users/${id}/export`, {}, token),
+
+  anonymizeUser: (token: string, id: string) =>
+    request<{ status: string }>(`/admin/users/${id}/anonymize`, { method: "POST" }, token),
+
+  userFlags: (token: string, id: string) =>
+    request<{ flags: string[] }>(`/admin/users/${id}/flags`, {}, token),
+
+  validateEntity: (token: string, id: string) =>
+    request<{ status: string; matches: number }>(`/admin/entities/${id}/validate`, { method: "POST" }, token),
 };
 
 export interface AdminUser {
