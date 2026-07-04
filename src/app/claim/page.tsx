@@ -13,6 +13,7 @@ import {
   type EntityKind,
 } from "@/stores/useOnboardingStore";
 import { searchApi, authApi, businessApi, claimApi } from "@/lib/api";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 /* ── Design tokens ── */
 const INDIGO = "#5B45C9";
@@ -649,6 +650,7 @@ export default function ClaimPage() {
                         try {
                           const res = await authApi.verifyCode(emailVerifyInput.trim(), emailCode);
                           store.setToken(res.access_token);
+                          useAuthStore.getState().setAuth(res.access_token, { email: emailVerifyInput.trim() } as never);
                           store.setAuthed(true); store.setStep(4);
                         } catch (err) {
                           const msg = err instanceof Error ? err.message : "";
@@ -963,6 +965,7 @@ export default function ClaimPage() {
                               try {
                                 const res = await authApi.verifyCode(emailInput.trim(), emailCode);
                                 store.setToken(res.access_token);
+                                useAuthStore.getState().setAuth(res.access_token, { email: emailInput.trim() } as never);
                                 store.setAuthed(true);
                               } catch (err) {
                                 const msg = err instanceof Error ? err.message : "";

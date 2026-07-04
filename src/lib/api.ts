@@ -63,6 +63,12 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ email, code }),
     }),
+
+  setPassword: (password: string, token: string): Promise<{ message: string }> =>
+    request("/auth/set-password", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }, token),
 };
 
 // Claims — /claim IS the waitlist (LandingSpec v2.1 §02)

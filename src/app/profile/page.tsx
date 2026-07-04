@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import QRCode from "react-qr-code";
 import { Wordmark } from "@/components/ui/Wordmark";
+import AccountMenu from "@/components/AccountMenu";
 import { BadgePill } from "@/components/ui/BadgePill";
 import { IsoChip } from "@/components/ui/IsoChip";
 import {
@@ -115,6 +116,9 @@ export default function ProfilePage() {
       <div style={{ position: "fixed", top: m ? 16 : 22, left: m ? 16 : 28, zIndex: 20 }}>
         <Wordmark size="sm" />
       </div>
+
+      {/* Account menu */}
+      <AccountMenu />
 
       {/* Content */}
       <div

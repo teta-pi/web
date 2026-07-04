@@ -6,6 +6,7 @@ import { getDisplayResults } from "@/lib/seedData";
 import type { DisplaySearchResult, SearchResult } from "@/lib/types";
 import { LEVEL_ACCENT, LEVEL_LABEL, LEVEL_HASH } from "@/lib/types";
 import { searchApi } from "@/lib/api";
+import AccountMenu from "@/components/AccountMenu";
 
 type Filter = "all" | "full" | "registry" | "video";
 
@@ -177,24 +178,8 @@ export default function SearchPage() {
           <Wordmark size="sm" />
         </div>
 
-        {/* Get verified pill */}
-        <Link
-          href="/claim"
-          style={{
-            position: "fixed", top: m ? 16 : 26, right: m ? 16 : 30, zIndex: 10,
-            display: "inline-flex", alignItems: "center", gap: 7,
-            padding: "9px 16px",
-            border: "1px solid rgba(255,255,255,0.7)",
-            borderRadius: 18,
-            background: "rgba(255,255,255,0.55)",
-            boxShadow: "0 6px 20px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.85)",
-            backdropFilter: "blur(12px) saturate(140%)",
-            WebkitBackdropFilter: "blur(12px) saturate(140%)",
-            fontSize: 13, fontWeight: 600, color: "#3A2C5C", textDecoration: "none",
-          }}
-        >
-          Create account <span style={{ color: "#5B45C9" }}>→</span>
-        </Link>
+        {/* Account menu / Create account */}
+        <AccountMenu />
 
         {/* ===== EMPTY STATE ===== */}
         {!submitted && (
