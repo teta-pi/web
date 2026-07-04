@@ -94,6 +94,110 @@ export const claimApi = {
     request("/claim/stats"),
 };
 
+// Back office (admin-gated endpoints)
+export const adminApi = {
+  stats: (token: string) => request<{
+    users: { total: number; today: number; week: number };
+    claims: { total: number; pay_ready: number; pay_ready_pct: number };
+    entities: { total: number; by_level: Record<string, number> };
+    verification_events: number;
+  }>("/admin/stats", {}, token),
+
+  users: (token: string, params: { q?: string; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.offset) qs.set("offset", String(params.offset));
+    return request<{ total: number; results: AdminUser[] }>(`/admin/users?${qs}`, {}, token);
+  },
+
+  userDetail: (token: string, id: string) =>
+    request<AdminUserDetail>(`/admin/users/${id}`, {}, token),
+
+  claims: (token: string, params: { offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.offset) qs.set("offset", String(params.offset));
+    return request<{ total: number; results: AdminClaim[] }>(`/admin/claims?${qs}`, {}, token);
+  },
+
+  entities: (token: string, params: { q?: string; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.offset) qs.set("offset", String(params.offset));
+    return request<{ total: number; results: AdminEntity[] }>(`/admin/entities?${qs}`, {}, token);
+  },
+
+  auditLog: (token: string, params: { offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.offset) qs.set("offset", String(params.offset));
+    return request<{ total: number; results: AdminAuditEntry[] }>(`/admin/audit-log?${qs}`, {}, token);
+  },
+};
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  full_name: string | null;
+  auth_provider: string;
+  role: string;
+  is_active: boolean;
+  is_agent: boolean;
+  created_at: string;
+  entities_count: number;
+}
+
+export interface AdminUserDetail {
+  user: AdminUser & { updated_at: string };
+  entities: AdminEntity[];
+  verification_events: {
+    id: string;
+    entity_id: string;
+    event_type: string;
+    level: number;
+    source: string;
+    ots_status: string;
+    btc_block: number | null;
+    created_at: string;
+  }[];
+}
+
+export interface AdminClaim {
+  id: string;
+  position: number;
+  email: string;
+  entity_type: string;
+  ready_to_pay: boolean;
+  source: Record<string, string | null> | null;
+  created_at: string;
+}
+
+export interface AdminEntity {
+  id: string;
+  name: string;
+  slug: string;
+  entity_type: string;
+  segment?: string;
+  verification_level: string;
+  registry_status: string;
+  registry_id: string | null;
+  country: string | null;
+  owner_email?: string;
+  is_published: boolean;
+  is_public: boolean;
+  t_score?: number;
+  p_score?: number;
+  created_at: string;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  actor_email: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
 // Search
 export const searchApi = {
   search: (
