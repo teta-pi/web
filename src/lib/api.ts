@@ -90,7 +90,34 @@ export const authApi = {
 
   personalApiKey: (token: string): Promise<{ api_key: string; note: string }> =>
     request("/auth/personal-api-key", { method: "POST" }, token),
+
+  me: (token: string): Promise<{
+    id: string; email: string; full_name: string | null; role: string;
+    avatar_url: string | null; has_password: boolean; has_api_key: boolean;
+  }> => request("/auth/me", {}, token),
+
+  uploadAvatar: async (file: File, token: string): Promise<{ avatar_url: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/api/v1/auth/avatar`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(typeof err.detail === "string" ? err.detail : "Upload failed");
+    }
+    return res.json();
+  },
 };
+
+/** Absolute URL for media paths returned by the API (e.g. /media/local/...). */
+export function mediaUrl(path: string | null): string | null {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  return `${API_BASE}/api/v1${path}`;
+}
 
 // Claims — /claim IS the waitlist (LandingSpec v2.1 §02)
 export const claimApi = {

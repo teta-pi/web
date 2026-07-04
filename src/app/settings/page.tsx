@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authApi } from "@/lib/api";
+import { authApi, mediaUrl } from "@/lib/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import AccountMenu from "@/components/AccountMenu";
 
@@ -38,6 +38,10 @@ export default function SettingsPage() {
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState("");
+
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [keyBusy, setKeyBusy] = useState(false);
   const [sessionBusy, setSessionBusy] = useState(false);
@@ -48,6 +52,10 @@ export default function SettingsPage() {
   useEffect(() => {
     if (mounted && !token) router.replace("/claim");
   }, [mounted, token, router]);
+  useEffect(() => {
+    if (!token) return;
+    authApi.me(token).then((me) => setAvatarUrl(mediaUrl(me.avatar_url))).catch(() => {});
+  }, [token]);
 
   if (!mounted || !token) return null;
 
@@ -68,15 +76,42 @@ export default function SettingsPage() {
         {/* Account */}
         <div style={{ ...glass, padding: "26px 28px", marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 14 }}>Account</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 44, height: 44, borderRadius: "50%", background: `linear-gradient(180deg,#6E58D6,${INDIGO})`, color: "#fff", fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {(user?.email ?? "?")[0].toUpperCase()}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: avatarUrl ? "#fff" : `linear-gradient(180deg,#6E58D6,${INDIGO})`, color: "#fff", fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                (user?.email ?? "?")[0].toUpperCase()
+              )}
             </div>
-            <div>
+            <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: 15.5, fontWeight: 600 }}>{user?.email ?? "Signed in"}</div>
               <div style={{ fontSize: 12.5, color: MUTED }}>Signed in with email code</div>
             </div>
+            <label style={{ fontSize: 13, fontWeight: 600, padding: "9px 16px", borderRadius: 10, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer" }}>
+              {avatarBusy ? "Uploading…" : avatarUrl ? "Change avatar" : "Upload avatar"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                style={{ display: "none" }}
+                disabled={avatarBusy}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  setAvatarBusy(true); setAvatarMsg("");
+                  try {
+                    const r = await authApi.uploadAvatar(f, token);
+                    setAvatarUrl(mediaUrl(r.avatar_url));
+                    setAvatarMsg("✓ Avatar updated.");
+                  } catch (err) {
+                    setAvatarMsg(err instanceof Error ? err.message : "Upload failed.");
+                  } finally { setAvatarBusy(false); e.target.value = ""; }
+                }}
+              />
+            </label>
           </div>
+          {avatarMsg && <div style={{ fontSize: 13, color: avatarMsg.startsWith("✓") ? "#3FA97C" : SUN, marginTop: 10 }}>{avatarMsg}</div>}
         </div>
 
         {/* Password */}

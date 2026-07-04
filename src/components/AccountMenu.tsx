@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { authApi, mediaUrl } from "@/lib/api";
 
 const INDIGO = "#5B45C9";
 
@@ -13,10 +14,16 @@ export default function AccountMenu({ fixed = true }: { fixed?: boolean }) {
   const { token, user, clearAuth } = useAuthStore();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!token) { setAvatarUrl(null); return; }
+    authApi.me(token).then((me) => setAvatarUrl(mediaUrl(me.avatar_url))).catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -64,14 +71,20 @@ export default function AccountMenu({ fixed = true }: { fixed?: boolean }) {
         style={{
           width: 40, height: 40, borderRadius: "50%",
           border: "1px solid rgba(255,255,255,0.7)",
-          background: `linear-gradient(180deg,#6E58D6,${INDIGO})`,
+          background: avatarUrl ? "#fff" : `linear-gradient(180deg,#6E58D6,${INDIGO})`,
           color: "#fff", fontSize: 16, fontWeight: 700,
           boxShadow: "0 6px 20px rgba(91,69,201,0.30), inset 0 1px 0 rgba(255,255,255,0.3)",
           cursor: "pointer", fontFamily: "inherit",
           display: "flex", alignItems: "center", justifyContent: "center",
+          overflow: "hidden", padding: 0,
         }}
       >
-        {letter}
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          letter
+        )}
       </button>
 
       {open && (
