@@ -33,24 +33,24 @@ export default function AccountMenu({ fixed = true }: { fixed?: boolean }) {
   if (!mounted) return null;
 
   if (!token) {
+    const pill: React.CSSProperties = {
+      display: "inline-flex", alignItems: "center", gap: 7,
+      padding: "9px 16px",
+      border: "1px solid rgba(255,255,255,0.7)",
+      borderRadius: 18,
+      background: "rgba(255,255,255,0.55)",
+      boxShadow: "0 6px 20px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.85)",
+      backdropFilter: "blur(12px) saturate(140%)",
+      WebkitBackdropFilter: "blur(12px) saturate(140%)",
+      fontSize: 13, fontWeight: 600, color: "#3A2C5C", textDecoration: "none",
+    };
     return (
-      <Link
-        href="/claim"
-        style={{
-          ...wrapStyle,
-          display: "inline-flex", alignItems: "center", gap: 7,
-          padding: "9px 16px",
-          border: "1px solid rgba(255,255,255,0.7)",
-          borderRadius: 18,
-          background: "rgba(255,255,255,0.55)",
-          boxShadow: "0 6px 20px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.85)",
-          backdropFilter: "blur(12px) saturate(140%)",
-          WebkitBackdropFilter: "blur(12px) saturate(140%)",
-          fontSize: 13, fontWeight: 600, color: "#3A2C5C", textDecoration: "none",
-        }}
-      >
-        Create account <span style={{ color: INDIGO }}>→</span>
-      </Link>
+      <div style={{ ...wrapStyle, display: "flex", gap: 8 }}>
+        <Link href="/login" style={pill}>Sign in</Link>
+        <Link href="/claim" style={pill}>
+          Create account <span style={{ color: INDIGO }}>→</span>
+        </Link>
+      </div>
     );
   }
 

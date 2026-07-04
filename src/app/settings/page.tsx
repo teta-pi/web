@@ -32,6 +32,18 @@ export default function SettingsPage() {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  const [newEmail, setNewEmail] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [sessionMsg, setSessionMsg] = useState("");
+  const [delBusy, setDelBusy] = useState(false);
+
   useEffect(() => setMounted(true), []);
   useEffect(() => {
     if (mounted && !token) router.replace("/claim");
@@ -116,6 +128,99 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Change email */}
+        <div style={{ ...glass, padding: "26px 28px", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 6 }}>Change email</div>
+          <p style={{ fontSize: 13.5, color: TEXT_SEC, margin: "0 0 18px", lineHeight: 1.55 }}>
+            We&apos;ll send a verification code to the new address.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 380 }}>
+            {!emailCodeSent ? (
+              <>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => { setNewEmail(e.target.value); setEmailMsg(null); }}
+                  placeholder="new@email.com"
+                  style={{ height: 46, padding: "0 14px", fontSize: 14.5, border: "1px solid rgba(26,16,53,0.12)", borderRadius: 10, background: "rgba(255,255,255,0.7)", color: TEXT, fontFamily: "inherit" }}
+                />
+                {emailMsg && <div style={{ fontSize: 13, color: emailMsg.ok ? "#3FA97C" : SUN }}>{emailMsg.text}</div>}
+                <button
+                  disabled={!newEmail.includes("@") || emailBusy}
+                  onClick={async () => {
+                    setEmailBusy(true); setEmailMsg(null);
+                    try {
+                      await authApi.changeEmail(newEmail.trim(), token);
+                      setEmailCodeSent(true);
+                    } catch (err) {
+                      setEmailMsg({ ok: false, text: err instanceof Error ? err.message : "Failed to send code." });
+                    } finally { setEmailBusy(false); }
+                  }}
+                  style={{ height: 46, fontSize: 14.5, fontWeight: 600, color: "#fff", background: !newEmail.includes("@") ? "rgba(26,16,53,0.15)" : `linear-gradient(180deg,#6E58D6,${INDIGO})`, border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", opacity: emailBusy ? 0.6 : 1 }}
+                >
+                  {emailBusy ? "Sending…" : "Send code to new email"}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: TEXT_SEC }}>Code sent to <strong>{newEmail}</strong></div>
+                <input
+                  value={emailCode}
+                  onChange={(e) => { setEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setEmailMsg(null); }}
+                  placeholder="· · · · · ·"
+                  maxLength={6}
+                  style={{ height: 50, padding: "0 14px", fontSize: 22, letterSpacing: 8, fontFamily: "ui-monospace,'SF Mono',monospace", border: "1px solid rgba(26,16,53,0.12)", borderRadius: 10, background: "rgba(255,255,255,0.7)", color: TEXT, textAlign: "center" }}
+                />
+                {emailMsg && <div style={{ fontSize: 13, color: emailMsg.ok ? "#3FA97C" : SUN }}>{emailMsg.text}</div>}
+                <button
+                  disabled={emailCode.length < 6 || emailBusy}
+                  onClick={async () => {
+                    setEmailBusy(true); setEmailMsg(null);
+                    try {
+                      const res = await authApi.confirmEmailChange(newEmail.trim(), emailCode, token);
+                      useAuthStore.getState().setAuth(token, { email: res.email } as never);
+                      setEmailMsg({ ok: true, text: "✓ Email updated." });
+                      setEmailCodeSent(false); setNewEmail(""); setEmailCode("");
+                    } catch (err) {
+                      setEmailMsg({ ok: false, text: err instanceof Error ? err.message : "Wrong or expired code." });
+                    } finally { setEmailBusy(false); }
+                  }}
+                  style={{ height: 46, fontSize: 14.5, fontWeight: 600, color: "#fff", background: emailCode.length < 6 ? "rgba(26,16,53,0.15)" : `linear-gradient(180deg,#6E58D6,${INDIGO})`, border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", opacity: emailBusy ? 0.6 : 1 }}
+                >
+                  {emailBusy ? "Checking…" : "Confirm change"}
+                </button>
+                <span onClick={() => { setEmailCodeSent(false); setEmailCode(""); }} style={{ fontSize: 12.5, color: MUTED, cursor: "pointer" }}>Change address / resend</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* API key */}
+        <div style={{ ...glass, padding: "26px 28px", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 6 }}>API key</div>
+          <p style={{ fontSize: 13.5, color: TEXT_SEC, margin: "0 0 18px", lineHeight: 1.55 }}>
+            Personal key for the TETA+PI API and MCP tools. Shown once — rotating invalidates the previous key.
+          </p>
+          {apiKey ? (
+            <div style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 13, color: INDIGO, background: "rgba(91,69,201,0.07)", border: "1px solid rgba(91,69,201,0.2)", borderRadius: 10, padding: "12px 14px", wordBreak: "break-all", marginBottom: 10 }}>
+              {apiKey}
+            </div>
+          ) : null}
+          <button
+            disabled={keyBusy}
+            onClick={async () => {
+              if (apiKey && !confirm("Rotate the key? The previous key stops working immediately.")) return;
+              setKeyBusy(true);
+              try { const r = await authApi.personalApiKey(token); setApiKey(r.api_key); }
+              catch { alert("Failed to generate key"); }
+              finally { setKeyBusy(false); }
+            }}
+            style={{ fontSize: 14, fontWeight: 600, padding: "10px 20px", borderRadius: 11, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            {keyBusy ? "Generating…" : apiKey ? "Rotate key" : "Generate API key"}
+          </button>
+        </div>
+
         {/* Legal / links */}
         <div style={{ ...glass, padding: "26px 28px", marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 14 }}>Resources</div>
@@ -126,18 +231,57 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Sessions */}
+        <div style={{ ...glass, padding: "26px 28px", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 14 }}>Sessions</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={() => { clearAuth(); router.push("/"); }}
+              style={{ fontSize: 14, fontWeight: 600, padding: "10px 20px", borderRadius: 11, border: "1px solid rgba(26,16,53,0.14)", background: "none", color: TEXT_SEC, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Log out
+            </button>
+            <button
+              disabled={sessionBusy}
+              onClick={async () => {
+                setSessionBusy(true); setSessionMsg("");
+                try {
+                  const res = await authApi.logoutAll(token);
+                  useAuthStore.getState().setAuth(res.access_token, user ?? undefined);
+                  setSessionMsg("✓ All other sessions signed out. This one stays active.");
+                } catch { setSessionMsg("Failed — try again."); }
+                finally { setSessionBusy(false); }
+              }}
+              style={{ fontSize: 14, fontWeight: 600, padding: "10px 20px", borderRadius: 11, border: "1px solid rgba(176,69,69,0.35)", background: "rgba(176,69,69,0.07)", color: "#B04545", cursor: "pointer", fontFamily: "inherit", opacity: sessionBusy ? 0.6 : 1 }}
+            >
+              {sessionBusy ? "Working…" : "Log out everywhere"}
+            </button>
+          </div>
+          {sessionMsg && <div style={{ fontSize: 13, color: sessionMsg.startsWith("✓") ? "#3FA97C" : SUN, marginTop: 10 }}>{sessionMsg}</div>}
+        </div>
+
         {/* Danger zone */}
-        <div style={{ ...glass, padding: "26px 28px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 14 }}>Session</div>
+        <div style={{ ...glass, padding: "26px 28px", border: "1px solid rgba(176,69,69,0.25)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#B04545", marginBottom: 14 }}>Danger zone</div>
           <button
-            onClick={() => { clearAuth(); router.push("/"); }}
-            style={{ fontSize: 14, fontWeight: 600, padding: "10px 20px", borderRadius: 11, border: "1px solid rgba(176,69,69,0.35)", background: "rgba(176,69,69,0.07)", color: "#B04545", cursor: "pointer", fontFamily: "inherit" }}
+            disabled={delBusy}
+            onClick={async () => {
+              if (!confirm("Delete your account? PII is erased, your pages are unpublished. This cannot be undone.")) return;
+              if (!confirm("Really sure? Bitcoin timestamps remain on the public blockchain (they contain no personal data).")) return;
+              setDelBusy(true);
+              try {
+                await authApi.deleteAccount(token);
+                clearAuth();
+                router.push("/");
+              } catch { alert("Deletion failed — contact hello@tetapi.dev"); setDelBusy(false); }
+            }}
+            style={{ fontSize: 14, fontWeight: 600, padding: "10px 20px", borderRadius: 11, border: "none", background: "#B04545", color: "#fff", cursor: "pointer", fontFamily: "inherit", opacity: delBusy ? 0.6 : 1 }}
           >
-            Log out
+            {delBusy ? "Deleting…" : "Delete account"}
           </button>
           <p style={{ fontSize: 12.5, color: MUTED, margin: "14px 0 0", lineHeight: 1.55 }}>
-            To delete your account and data (GDPR), email <a href="mailto:hello@tetapi.dev" style={{ color: INDIGO }}>hello@tetapi.dev</a>.
-            Bitcoin timestamps are immutable and remain on the public blockchain.
+            GDPR Art. 17: personal data is erased immediately. Bitcoin timestamps are immutable
+            and remain on the public blockchain — they contain hashes, not personal data.
           </p>
         </div>
       </div>

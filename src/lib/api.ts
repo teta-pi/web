@@ -69,6 +69,27 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ password }),
     }, token),
+
+  changeEmail: (newEmail: string, token: string): Promise<{ message: string }> =>
+    request("/auth/change-email", {
+      method: "POST",
+      body: JSON.stringify({ new_email: newEmail }),
+    }, token),
+
+  confirmEmailChange: (newEmail: string, code: string, token: string): Promise<{ message: string; email: string }> =>
+    request("/auth/confirm-email-change", {
+      method: "POST",
+      body: JSON.stringify({ new_email: newEmail, code }),
+    }, token),
+
+  logoutAll: (token: string): Promise<AuthToken> =>
+    request("/auth/logout-all", { method: "POST" }, token),
+
+  deleteAccount: (token: string): Promise<{ status: string }> =>
+    request("/auth/delete-account", { method: "POST" }, token),
+
+  personalApiKey: (token: string): Promise<{ api_key: string; note: string }> =>
+    request("/auth/personal-api-key", { method: "POST" }, token),
 };
 
 // Claims — /claim IS the waitlist (LandingSpec v2.1 §02)
