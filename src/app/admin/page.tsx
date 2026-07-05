@@ -9,6 +9,7 @@ import {
   AdminClaim,
   AdminEntity,
   AdminAuditEntry,
+  AdminAnalytics,
 } from "@/lib/api";
 
 const INDIGO = "#5B45C9";
@@ -25,7 +26,7 @@ const glass: React.CSSProperties = {
   boxShadow: "0 8px 30px rgba(45,55,120,0.10)",
 };
 
-type Tab = "users" | "claims" | "entities" | "audit";
+type Tab = "analytics" | "users" | "claims" | "entities" | "audit";
 
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
@@ -123,7 +124,7 @@ function AdminLogin({ onToken }: { onToken: (t: string) => void }) {
 /* ── Dashboard ─────────────────────────────────────────────────────────────── */
 
 function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>("users");
+  const [tab, setTab] = useState<Tab>("analytics");
   const [stats, setStats] = useState<Awaited<ReturnType<typeof adminApi.stats>> | null>(null);
   const [error, setError] = useState("");
 
@@ -161,7 +162,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {(["users", "claims", "entities", "audit"] as Tab[]).map((t) => (
+          {(["analytics", "users", "claims", "entities", "audit"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -172,11 +173,12 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                 border: tab === t ? "none" : "1px solid rgba(255,255,255,0.7)",
               }}
             >
-              {t === "users" ? "Users" : t === "claims" ? "Claims" : t === "entities" ? "Entities" : "Audit log"}
+              {t === "analytics" ? "Analytics" : t === "users" ? "Users" : t === "claims" ? "Claims" : t === "entities" ? "Entities" : "Audit log"}
             </button>
           ))}
         </div>
 
+        {tab === "analytics" && <AnalyticsTab token={token} />}
         {tab === "users" && <UsersTab token={token} />}
         {tab === "claims" && <ClaimsTab token={token} />}
         {tab === "entities" && <EntitiesTab token={token} />}
@@ -231,6 +233,139 @@ function Badge({ text, color }: { text: string; color: string }) {
 
 function fmtDate(s: string) {
   return new Date(s).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/* ── Analytics tab (GoatCounter bridge) ────────────────────────────────────── */
+
+function AnalyticsTab({ token }: { token: string }) {
+  const [data, setData] = useState<AdminAnalytics | null>(null);
+  const [days, setDays] = useState(14);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    adminApi.analytics(token, days).then(setData).catch(() => setError("Failed to load analytics"));
+  }, [token, days]);
+
+  if (error) return <div style={{ ...glass, padding: 24, color: TEXT_SEC, fontSize: 13.5 }}>{error}</div>;
+  if (!data) return null;
+
+  if (!data.available) {
+    return (
+      <div style={{ ...glass, padding: 24, color: TEXT_SEC, fontSize: 13.5 }}>
+        GoatCounter database not reachable from the API. See <code>docs/analytics.md</code>.
+      </div>
+    );
+  }
+
+  const t = data.totals;
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginBottom: 16 }}>
+        <StatCard label="Last 24h" value={t?.last_24h ?? 0} sub="pageviews" />
+        <StatCard label="Last 7 days" value={t?.last_7d ?? 0} sub="pageviews" accent />
+        <StatCard label="Last 30 days" value={t?.last_30d ?? 0} sub="pageviews" />
+        <StatCard label="All time" value={t?.all_time ?? 0} sub="since 2026-07-03" />
+      </div>
+
+      <div style={{ ...glass, padding: "18px 20px", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED }}>Daily pageviews</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[14, 30, 90].map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                style={{
+                  fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+                  color: days === d ? "#fff" : TEXT_SEC,
+                  background: days === d ? INDIGO : "rgba(255,255,255,0.55)",
+                  border: days === d ? "none" : "1px solid rgba(26,16,53,0.12)",
+                }}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+        <DailyChart daily={data.daily ?? []} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Top pages</div>
+          <BreakdownList items={(data.top_paths ?? []).map((p) => ({ label: p.path, total: p.total }))} color={INDIGO} />
+        </div>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Referrers</div>
+          <BreakdownList items={(data.top_referrers ?? []).map((r) => ({ label: r.ref, total: r.total }))} color={SUN} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16 }}>
+        <div style={{ ...glass, padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Browsers</div>
+          <BreakdownList items={(data.browsers ?? []).map((b) => ({ label: b.name, total: b.total }))} color={INDIGO} compact />
+        </div>
+        <div style={{ ...glass, padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Systems</div>
+          <BreakdownList items={(data.systems ?? []).map((s) => ({ label: s.name, total: s.total }))} color={INDIGO} compact />
+        </div>
+        <div style={{ ...glass, padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Countries</div>
+          <BreakdownList items={(data.locations ?? []).map((l) => ({ label: l.location, total: l.total }))} color={INDIGO} compact />
+        </div>
+        <div style={{ ...glass, padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Device</div>
+          <BreakdownList items={(data.sizes ?? []).map((s) => ({ label: s.bucket, total: s.total }))} color={INDIGO} compact />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DailyChart({ daily }: { daily: { day: string; total: number }[] }) {
+  if (daily.length === 0) return <div style={{ fontSize: 13, color: MUTED, padding: "20px 0" }}>No data yet.</div>;
+  const max = Math.max(...daily.map((d) => d.total), 1);
+  const barW = Math.max(6, Math.min(28, 640 / daily.length - 4));
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 140, overflowX: daily.length > 40 ? "auto" : "visible" }}>
+      {daily.map((d) => (
+        <div key={d.day} title={`${d.day}: ${d.total}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          <div
+            style={{
+              width: barW,
+              height: Math.max(3, (d.total / max) * 110),
+              background: `linear-gradient(180deg,#6E58D6,${INDIGO})`,
+              borderRadius: 4,
+            }}
+          />
+          <div style={{ fontSize: 9.5, color: MUTED, writingMode: daily.length > 20 ? "vertical-rl" : undefined }}>
+            {new Date(d.day).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BreakdownList({ items, color, compact }: { items: { label: string; total: number }[]; color: string; compact?: boolean }) {
+  if (items.length === 0) return <div style={{ fontSize: 13, color: MUTED }}>No data yet.</div>;
+  const max = Math.max(...items.map((i) => i.total), 1);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: compact ? 8 : 10 }}>
+      {items.map((item) => (
+        <div key={item.label}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: compact ? 12 : 13, marginBottom: 3 }}>
+            <span style={{ color: TEXT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: compact ? 100 : 320 }}>{item.label}</span>
+            <span style={{ color: MUTED, fontFamily: "ui-monospace,monospace", fontSize: compact ? 11.5 : 12 }}>{item.total}</span>
+          </div>
+          <div style={{ height: 4, borderRadius: 2, background: "rgba(26,16,53,0.06)" }}>
+            <div style={{ height: 4, borderRadius: 2, width: `${(item.total / max) * 100}%`, background: color }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /* ── Users tab ─────────────────────────────────────────────────────────────── */

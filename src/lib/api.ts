@@ -6,7 +6,6 @@ import type {
   IntentResolution,
   RegistrySearchResult,
   SearchResult,
-  User,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -34,12 +33,6 @@ async function request<T>(
 
 // Auth
 export const authApi = {
-  register: (email: string, password?: string, fullName?: string): Promise<User> =>
-    request("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email, password, full_name: fullName }),
-    }),
-
   login: (email: string, password: string): Promise<AuthToken> =>
     request("/auth/token", {
       method: "POST",
@@ -197,6 +190,9 @@ export const adminApi = {
 
   validateEntity: (token: string, id: string) =>
     request<{ status: string; matches: number }>(`/admin/entities/${id}/validate`, { method: "POST" }, token),
+
+  analytics: (token: string, days = 14) =>
+    request<AdminAnalytics>(`/admin/analytics?days=${days}`, {}, token),
 };
 
 export interface AdminUser {
@@ -262,6 +258,23 @@ export interface AdminAuditEntry {
   target_id: string | null;
   detail: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface AdminAnalytics {
+  available: boolean;
+  totals?: {
+    last_24h: number | null;
+    last_7d: number | null;
+    last_30d: number | null;
+    all_time: number | null;
+  };
+  daily?: { day: string; total: number }[];
+  top_paths?: { path: string; title: string; total: number }[];
+  top_referrers?: { ref: string; total: number }[];
+  browsers?: { name: string; total: number }[];
+  systems?: { name: string; total: number }[];
+  locations?: { location: string; total: number }[];
+  sizes?: { bucket: string; total: number }[];
 }
 
 // Search
