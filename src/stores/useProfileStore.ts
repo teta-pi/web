@@ -45,7 +45,8 @@ interface ProfileState {
   setNameStatus: (status: NameStatus) => void;
   setRegistryData: (data: ProfileState["registryData"]) => void;
   setDescription: (desc: string) => void;
-  addBlock: () => void;
+  addBlock: (block?: ProfileBlock) => void;
+  setBlocks: (blocks: ProfileBlock[]) => void;
   updateBlock: (id: string, patch: Partial<Omit<ProfileBlock, "id">>) => void;
   removeBlock: (id: string) => void;
   setBlockMedia: (id: string, media: BlockMedia | null) => void;
@@ -77,11 +78,11 @@ export const useProfileStore = create<ProfileState>((set) => ({
   setNameStatus: (nameStatus) => set({ nameStatus }),
   setRegistryData: (registryData) => set({ registryData }),
   setDescription: (description) => set({ description }),
-  addBlock: () =>
+  addBlock: (block) =>
     set((s) => ({
       blocks: [
         ...s.blocks,
-        {
+        block ?? {
           id: `block-${_blockCounter++}`,
           title: "",
           desc: "",
@@ -89,6 +90,7 @@ export const useProfileStore = create<ProfileState>((set) => ({
         },
       ],
     })),
+  setBlocks: (blocks) => set({ blocks }),
   updateBlock: (id, patch) =>
     set((s) => ({
       blocks: s.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),

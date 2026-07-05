@@ -12,7 +12,41 @@ import {
   CameraIcon,
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
-import { devices, authApi } from "@/lib/api";
+import { devices, authApi, blockApi, businessApi } from "@/lib/api";
+import type { Block } from "@/lib/types";
+
+// Local (unsaved) blocks use `block-N` ids; persisted blocks use server UUIDs.
+const isServerBlock = (id: string) => !id.startsWith("block-");
+
+// Map a persisted block from the API onto the store's block shape.
+function mapServerBlock(b: Block): ProfileBlock {
+  const media = b.media?.[0];
+  return {
+    id: b.id,
+    title: b.title ?? "",
+    desc: b.description ?? "",
+    media: media
+      ? { source: media.c2pa_verified ? "pi_camera" : "file", phase: "done" }
+      : null,
+  };
+}
+
+// Debounced per-block PATCH. Flushes the latest title/desc from the store so
+// rapid edits across both fields never clobber each other.
+const blockSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function scheduleBlockSave(blockId: string, token: string | null) {
+  if (!token || !isServerBlock(blockId)) return;
+  clearTimeout(blockSaveTimers.get(blockId));
+  blockSaveTimers.set(
+    blockId,
+    setTimeout(() => {
+      blockSaveTimers.delete(blockId);
+      const b = useProfileStore.getState().blocks.find((x) => x.id === blockId);
+      if (!b) return;
+      blockApi.update(blockId, { title: b.title, description: b.desc }, token).catch(() => {});
+    }, 600)
+  );
+}
 
 function useViewport() {
   const [vw, setVw] = useState(1280);
@@ -88,6 +122,29 @@ export default function ProfilePage() {
     if (kind) store.setEntityKind(kind);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load the entity + its persisted blocks once the entity id is known.
+  useEffect(() => {
+    const businessId = store.businessId;
+    if (!businessId) return;
+    let cancelled = false;
+    (async () => {
+      const [biz, blocks] = await Promise.all([
+        businessApi.get(businessId).catch(() => null),
+        blockApi.list(businessId).catch(() => [] as Block[]),
+      ]);
+      if (cancelled) return;
+      if (biz) {
+        if (biz.name) store.setCompanyName(biz.name);
+        if (biz.description) store.setDescription(biz.description);
+      }
+      store.setBlocks(blocks.map(mapServerBlock));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.businessId]);
 
   useRegistryCheck(store.companyName, store.entityKind === "business");
 
@@ -192,12 +249,37 @@ function EditView({ mobile: m }: { mobile: boolean }) {
   const namePlaceholder = isBusiness ? "Company name" : store.entityKind === "journalist" ? "Your full name" : store.entityKind === "artist" ? "Your name / stage name" : "Organization name";
   const descPlaceholder = isBusiness ? "What does your company do?" : store.entityKind === "journalist" ? "What do you cover? Where do you publish?" : store.entityKind === "artist" ? "Your medium, style, or practice." : "What does your organization do?";
 
+  const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+
   const handleSave = async () => {
     setSaving(true);
-    // Simulate save (real: PATCH /businesses/:id)
-    await new Promise((r) => setTimeout(r, 700));
+    if (store.businessId && token) {
+      try {
+        await businessApi.update(
+          store.businessId,
+          { name: store.companyName, description: store.description },
+          token
+        );
+      } catch {
+        // keep the optimistic "Saved" UX; a failed sync retries on next save
+      }
+    }
     store.setSavedAt(new Date());
     setSaving(false);
+  };
+
+  // Persist the new block up front so it has a real id (needed for media upload).
+  const handleAddBlock = async () => {
+    if (store.businessId && token) {
+      try {
+        const created = await blockApi.add(store.businessId, "", undefined, token, store.blocks.length);
+        store.addBlock(mapServerBlock(created));
+        return;
+      } catch {
+        // fall through to a local-only block if the API is unreachable
+      }
+    }
+    store.addBlock();
   };
 
   return (
@@ -339,7 +421,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
       {/* Empty state */}
       {store.blocks.length === 0 && (
         <div
-          onClick={() => store.addBlock()}
+          onClick={handleAddBlock}
           style={{
             display: "flex",
             flexDirection: "column",
@@ -375,7 +457,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
 
       {store.blocks.length > 0 && (
         <div
-          onClick={() => store.addBlock()}
+          onClick={handleAddBlock}
           style={{
             marginTop: 16,
             display: "inline-flex",
@@ -402,6 +484,14 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
   const fileRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(!block.title); // new blocks start in edit mode
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+
+  const removeBlock = () => {
+    clearTimeout(blockSaveTimers.get(block.id));
+    blockSaveTimers.delete(block.id);
+    if (isServerBlock(block.id) && token) blockApi.delete(block.id, token).catch(() => {});
+    store.removeBlock(block.id);
+  };
 
   const accentColor =
     block.media?.phase === "done"
@@ -471,7 +561,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
               Done
             </span>
           )}
-          <span onClick={() => store.removeBlock(block.id)} style={{ color: "#9991AC", cursor: "pointer", fontSize: 16 }}>×</span>
+          <span onClick={removeBlock} style={{ color: "#9991AC", cursor: "pointer", fontSize: 16 }}>×</span>
         </div>
       </div>
 
@@ -479,14 +569,14 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
         <>
           <input
             value={block.title}
-            onChange={(e) => store.updateBlock(block.id, { title: e.target.value })}
+            onChange={(e) => { store.updateBlock(block.id, { title: e.target.value }); scheduleBlockSave(block.id, token); }}
             placeholder="Block title"
             autoFocus
             style={{ width: "100%", fontSize: m ? 18 : 21, fontWeight: 600, color: "#1A1035", border: "none", background: "transparent", fontFamily: "inherit", marginBottom: 8 }}
           />
           <textarea
             value={block.desc}
-            onChange={(e) => store.updateBlock(block.id, { desc: e.target.value })}
+            onChange={(e) => { store.updateBlock(block.id, { desc: e.target.value }); scheduleBlockSave(block.id, token); }}
             placeholder="Describe what this block shows…"
             rows={2}
             style={{ width: "100%", fontSize: 15, fontWeight: 300, color: "#5A4F78", border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", lineHeight: 1.55, marginBottom: 16 }}

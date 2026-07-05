@@ -385,11 +385,12 @@ export const blockApi = {
     businessId: string,
     title: string,
     description?: string,
-    token?: string
+    token?: string,
+    order?: number
   ): Promise<Block> =>
     request(
       `/businesses/${businessId}/blocks`,
-      { method: "POST", body: JSON.stringify({ title, description }) },
+      { method: "POST", body: JSON.stringify({ title, description, order }) },
       token
     ),
 
