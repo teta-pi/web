@@ -10,6 +10,7 @@ import {
   AdminEntity,
   AdminAuditEntry,
   AdminAnalytics,
+  AdminProductMetrics,
 } from "@/lib/api";
 
 const INDIGO = "#5B45C9";
@@ -241,9 +242,14 @@ function AnalyticsTab({ token }: { token: string }) {
   const [data, setData] = useState<AdminAnalytics | null>(null);
   const [days, setDays] = useState(14);
   const [error, setError] = useState("");
+  const [product, setProduct] = useState<AdminProductMetrics | null>(null);
 
   useEffect(() => {
     adminApi.analytics(token, days).then(setData).catch(() => setError("Failed to load analytics"));
+  }, [token, days]);
+
+  useEffect(() => {
+    adminApi.productMetrics(token, Math.max(days, 30)).then(setProduct).catch(() => {});
   }, [token, days]);
 
   if (error) return <div style={{ ...glass, padding: 24, color: TEXT_SEC, fontSize: 13.5 }}>{error}</div>;
@@ -317,6 +323,71 @@ function AnalyticsTab({ token }: { token: string }) {
         <div style={{ ...glass, padding: "16px 18px" }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Device</div>
           <BreakdownList items={(data.sizes ?? []).map((s) => ({ label: s.bucket, total: s.total }))} color={INDIGO} compact />
+        </div>
+      </div>
+
+      {product && <ProductMetricsSection data={product} />}
+    </div>
+  );
+}
+
+/* ── Product metrics (growth, funnel — separate from GoatCounter traffic above) ── */
+
+function ProductMetricsSection({ data }: { data: AdminProductMetrics }) {
+  const f = data.funnel;
+  const funnelSteps: { label: string; value: number }[] = [
+    { label: "Waitlist claims", value: f.claims },
+    { label: "Signed up", value: f.signed_up },
+    { label: "Created entity", value: f.created_entity },
+    { label: "Verified", value: f.verified },
+  ];
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Entity growth</div>
+          <DailyChart daily={data.entity_growth} />
+        </div>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Verification events</div>
+          <DailyChart daily={data.verification_events_daily} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Entities by type</div>
+          <BreakdownList
+            items={Object.entries(data.entities_by_type).map(([label, total]) => ({ label, total }))}
+            color={INDIGO}
+          />
+        </div>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Claim → verified funnel</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {funnelSteps.map((s, i) => {
+              const max = funnelSteps[0].value || 1;
+              return (
+                <div key={s.label}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
+                    <span style={{ color: TEXT }}>{s.label}</span>
+                    <span style={{ color: MUTED, fontFamily: "ui-monospace,monospace", fontSize: 12 }}>
+                      {s.value}{i > 0 && funnelSteps[i - 1].value > 0 ? ` (${Math.round((100 * s.value) / funnelSteps[i - 1].value)}%)` : ""}
+                    </span>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 2, background: "rgba(26,16,53,0.06)" }}>
+                    <div style={{ height: 4, borderRadius: 2, width: `${(s.value / max) * 100}%`, background: i === funnelSteps.length - 1 ? SUN : INDIGO }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {!data.registry_search_health.available && (
+            <div style={{ fontSize: 11.5, color: MUTED, marginTop: 14 }}>
+              Registry search health: {data.registry_search_health.note}
+            </div>
+          )}
         </div>
       </div>
     </div>

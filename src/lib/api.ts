@@ -193,6 +193,9 @@ export const adminApi = {
 
   analytics: (token: string, days = 14) =>
     request<AdminAnalytics>(`/admin/analytics?days=${days}`, {}, token),
+
+  productMetrics: (token: string, days = 30) =>
+    request<AdminProductMetrics>(`/admin/product-metrics?days=${days}`, {}, token),
 };
 
 export interface AdminUser {
@@ -275,6 +278,19 @@ export interface AdminAnalytics {
   systems?: { name: string; total: number }[];
   locations?: { location: string; total: number }[];
   sizes?: { bucket: string; total: number }[];
+}
+
+export interface AdminProductMetrics {
+  entity_growth: { day: string; total: number }[];
+  verification_events_daily: { day: string; total: number }[];
+  entities_by_type: Record<string, number>;
+  funnel: {
+    claims: number;
+    signed_up: number;
+    created_entity: number;
+    verified: number;
+  };
+  registry_search_health: { available: boolean; note?: string };
 }
 
 // Search
