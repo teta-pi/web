@@ -15,6 +15,10 @@ import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/u
 import { devices, authApi, blockApi, businessApi } from "@/lib/api";
 import type { Block } from "@/lib/types";
 
+// Public entity pages live on the app subdomain. Shared links are always the
+// production URL — a localhost link would be useless to whoever receives it.
+const APP_ORIGIN = "https://app.tetapi.dev";
+
 // Local (unsaved) blocks use `block-N` ids; persisted blocks use server UUIDs.
 const isServerBlock = (id: string) => !id.startsWith("block-");
 
@@ -111,6 +115,10 @@ export default function ProfilePage() {
   const m = vw < 640;
   const store = useProfileStore();
 
+  // Public-page slug + published flag, for the "Share page" button.
+  const [slug, setSlug] = useState<string | null>(null);
+  const [published, setPublished] = useState(false);
+
   // Restore auth session from localStorage (written by claim flow on Step 5)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -137,6 +145,8 @@ export default function ProfilePage() {
       if (biz) {
         if (biz.name) store.setCompanyName(biz.name);
         if (biz.description) store.setDescription(biz.description);
+        setSlug(biz.slug ?? null);
+        setPublished(!!biz.is_published);
       }
       store.setBlocks(blocks.map(mapServerBlock));
     })();
@@ -186,6 +196,8 @@ export default function ProfilePage() {
           position: "relative", zIndex: 1,
         }}
       >
+        {published && slug && <SharePageButton slug={slug} mobile={m} />}
+
         {store.view === "edit" && <EditView mobile={m} />}
         {store.view === "visitor" && <VisitorView mobile={m} />}
         {store.view === "agent" && <AgentView mobile={m} />}
@@ -236,6 +248,55 @@ export default function ProfilePage() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ===== Share Page button =====
+// Only rendered once the entity is published — links to / copies the public page.
+function SharePageButton({ slug, mobile: m }: { slug: string; mobile: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${APP_ORIGIN}/e/${slug}`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked (e.g. insecure context) — the link is still openable.
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+          fontSize: m ? 11 : 12,
+          color: "#9991AC",
+          textDecoration: "none",
+          wordBreak: "break-all",
+        }}
+      >
+        {url.replace(/^https?:\/\//, "")}
+      </a>
+      <button
+        onClick={copy}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 7,
+          padding: "8px 16px",
+          border: "1px solid rgba(91,69,201,0.3)", borderRadius: 10,
+          background: "rgba(91,69,201,0.06)", color: "#5B45C9",
+          fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+          fontFamily: "inherit", whiteSpace: "nowrap",
+        }}
+      >
+        {copied ? "✓ Link copied" : "Share page"}
+      </button>
     </div>
   );
 }
