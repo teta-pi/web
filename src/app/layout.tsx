@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TETA+PI — Trust Infrastructure for Digital Entities",
   description:
-    "Verified businesses, journalists, and artists for the agent economy. Search entities verified through official registries and C2PA-signed media.",
+    "Get verified on TETA+PI. Businesses, journalists, and artists verified via registry + C2PA + Bitcoin become discoverable by AI agents through the MCP protocol.",
 };
 
 export default function RootLayout({

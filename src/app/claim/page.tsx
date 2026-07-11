@@ -606,7 +606,7 @@ export default function ClaimPage() {
                       onChange={(e) => setReadyToPay(e.target.checked)}
                       style={{ marginTop: 2, width: 15, height: 15, accentColor: INDIGO }}
                     />
-                    <span>I&apos;m ready to pay <strong>$21</strong> when billing launches — lock my founding price.</span>
+                    <span>I&apos;m ready to pay <strong>$25</strong> when billing launches — lock my founding price.</span>
                   </label>
                   {emailVerifyError && <div style={{ color: SUN, fontSize: 13, marginBottom: 10 }}>{emailVerifyError}</div>}
                   <BtnPrimary
@@ -913,7 +913,7 @@ export default function ClaimPage() {
                             onChange={(e) => setReadyToPay(e.target.checked)}
                             style={{ marginTop: 2, width: 15, height: 15, accentColor: INDIGO }}
                           />
-                          <span>I&apos;m ready to pay <strong>$21</strong> when billing launches — lock my founding price.</span>
+                          <span>I&apos;m ready to pay <strong>$25</strong> when billing launches — lock my founding price.</span>
                         </label>
 
                         {emailVerifyError && <div style={{ color: SUN, fontSize: 13 }}>{emailVerifyError}</div>}
