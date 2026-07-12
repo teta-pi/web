@@ -11,6 +11,7 @@ import {
   AdminAuditEntry,
   AdminAnalytics,
   AdminProductMetrics,
+  AdminHealthCheck,
 } from "@/lib/api";
 
 const INDIGO = "#5B45C9";
@@ -27,7 +28,7 @@ const glass: React.CSSProperties = {
   boxShadow: "0 8px 30px rgba(45,55,120,0.10)",
 };
 
-type Tab = "analytics" | "users" | "claims" | "entities" | "audit";
+type Tab = "dashboard" | "analytics" | "users" | "claims" | "entities" | "audit";
 
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
@@ -125,7 +126,7 @@ function AdminLogin({ onToken }: { onToken: (t: string) => void }) {
 /* ── Dashboard ─────────────────────────────────────────────────────────────── */
 
 function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>("analytics");
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [stats, setStats] = useState<Awaited<ReturnType<typeof adminApi.stats>> | null>(null);
   const [error, setError] = useState("");
 
@@ -163,7 +164,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {(["analytics", "users", "claims", "entities", "audit"] as Tab[]).map((t) => (
+          {(["dashboard", "analytics", "users", "claims", "entities", "audit"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -174,11 +175,12 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                 border: tab === t ? "none" : "1px solid rgba(255,255,255,0.7)",
               }}
             >
-              {t === "analytics" ? "Analytics" : t === "users" ? "Users" : t === "claims" ? "Claims" : t === "entities" ? "Entities" : "Audit log"}
+              {t === "dashboard" ? "Dashboard" : t === "analytics" ? "Analytics" : t === "users" ? "Users" : t === "claims" ? "Claims" : t === "entities" ? "Entities" : "Audit log"}
             </button>
           ))}
         </div>
 
+        {tab === "dashboard" && <DashboardTab token={token} stats={stats} />}
         {tab === "analytics" && <AnalyticsTab token={token} />}
         {tab === "users" && <UsersTab token={token} />}
         {tab === "claims" && <ClaimsTab token={token} />}
@@ -234,6 +236,159 @@ function Badge({ text, color }: { text: string; color: string }) {
 
 function fmtDate(s: string) {
   return new Date(s).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.round(mins / 60)}h ago`;
+}
+
+function FunnelChart({ funnel }: { funnel: AdminProductMetrics["funnel"] }) {
+  const steps: { label: string; value: number }[] = [
+    { label: "Waitlist claims", value: funnel.claims },
+    { label: "Signed up", value: funnel.signed_up },
+    { label: "Created entity", value: funnel.created_entity },
+    { label: "Verified", value: funnel.verified },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {steps.map((s, i) => {
+        const max = steps[0].value || 1;
+        return (
+          <div key={s.label}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
+              <span style={{ color: TEXT }}>{s.label}</span>
+              <span style={{ color: MUTED, fontFamily: "ui-monospace,monospace", fontSize: 12 }}>
+                {s.value}{i > 0 && steps[i - 1].value > 0 ? ` (${Math.round((100 * s.value) / steps[i - 1].value)}%)` : ""}
+              </span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: "rgba(26,16,53,0.06)" }}>
+              <div style={{ height: 4, borderRadius: 2, width: `${(s.value / max) * 100}%`, background: i === steps.length - 1 ? SUN : INDIGO }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Dashboard tab (Owner Dashboard, roadmap 8.2 — design in docs/analytics.md §2) ── */
+
+function DashboardTab({ token, stats }: { token: string; stats: { entities: { by_level: Record<string, number> } } | null }) {
+  const [product, setProduct] = useState<AdminProductMetrics | null>(null);
+  const [traffic, setTraffic] = useState<AdminAnalytics | null>(null);
+  const [health, setHealth] = useState<AdminHealthCheck | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    adminApi.productMetrics(token, 30).then(setProduct).catch(() => setError("Failed to load product metrics"));
+    adminApi.analytics(token, 14).then(setTraffic).catch(() => {});
+    adminApi.healthCheck(token).then(setHealth).catch(() => {});
+  }, [token]);
+
+  return (
+    <div>
+      {/* HEALTH */}
+      <div style={{ ...glass, padding: "16px 20px", marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED }}>Health</div>
+        <HealthRow label="api.tetapi.dev" ok={health?.api.ok} checkedAt={health?.checked_at} />
+        <HealthRow label="mcp.tetapi.dev" ok={health?.mcp.ok} checkedAt={health?.checked_at} />
+        <HealthRow label="stats.tetapi.dev (GoatCounter)" ok={health?.stats.ok} checkedAt={health?.checked_at} />
+      </div>
+
+      {error && <div style={{ color: SUN, fontSize: 13, marginBottom: 16 }}>{error}</div>}
+
+      {/* GROWTH + FUNNEL */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Growth (last 30d)</div>
+          {product ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <div style={{ fontSize: 12, color: TEXT_SEC, marginBottom: 4 }}>entities/day</div>
+                <DailyChart daily={product.entity_growth} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: TEXT_SEC, marginBottom: 4 }}>verification_events/day</div>
+                <DailyChart daily={product.verification_events_daily} />
+              </div>
+            </div>
+          ) : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+        </div>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Claim → verified funnel</div>
+          {product ? <FunnelChart funnel={product.funnel} /> : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+        </div>
+      </div>
+
+      {/* ENTITY MIX + VERIFICATION LEVEL */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Entity mix (by type)</div>
+          {product
+            ? <BreakdownList items={Object.entries(product.entities_by_type).map(([label, total]) => ({ label, total }))} color={INDIGO} />
+            : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+        </div>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Verification level</div>
+          {stats
+            ? <BreakdownList items={Object.entries(stats.entities.by_level).map(([label, total]) => ({ label, total }))} color={INDIGO} />
+            : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+        </div>
+      </div>
+
+      {/* MCP USAGE + TRAFFIC */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>MCP usage</div>
+          <NotAvailable note="Not available — roadmap 2.4 (MCP usage analytics). No request logging exists yet in mcp/src/*." />
+        </div>
+        <div style={{ ...glass, padding: "18px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Traffic (GoatCounter, 14d)</div>
+          {traffic?.available
+            ? (
+              <>
+                <DailyChart daily={traffic.daily ?? []} />
+                <div style={{ marginTop: 12 }}>
+                  <BreakdownList items={(traffic.top_referrers ?? []).slice(0, 5).map((r) => ({ label: r.ref, total: r.total }))} color={SUN} compact />
+                </div>
+              </>
+            )
+            : <div style={{ fontSize: 13, color: MUTED }}>{traffic ? "GoatCounter database not reachable." : "Loading…"}</div>}
+        </div>
+      </div>
+
+      {/* REGISTRY SEARCH HEALTH */}
+      <div style={{ ...glass, padding: "18px 20px" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Registry search health</div>
+        <NotAvailable note={product?.registry_search_health.note ?? "Not available — roadmap 1.2."} />
+      </div>
+    </div>
+  );
+}
+
+function HealthRow({ label, ok, checkedAt }: { label: string; ok?: boolean; checkedAt?: string }) {
+  const color = ok === undefined ? MUTED : ok ? "#3E9B5C" : "#B04545";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 4, background: color, flexShrink: 0 }} />
+      <span style={{ color: TEXT }}>{label}</span>
+      <span style={{ color: MUTED, fontSize: 12 }}>
+        {ok === undefined ? "checking…" : ok ? "ok" : "down"}{checkedAt ? ` (checked ${timeAgo(checkedAt)})` : ""}
+      </span>
+    </div>
+  );
+}
+
+function NotAvailable({ note }: { note: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: TEXT_SEC }}>
+      <span style={{ width: 8, height: 8, borderRadius: 4, background: MUTED, flexShrink: 0, marginTop: 4 }} />
+      <span>{note}</span>
+    </div>
+  );
 }
 
 /* ── Analytics tab (GoatCounter bridge) ────────────────────────────────────── */
@@ -334,14 +489,6 @@ function AnalyticsTab({ token }: { token: string }) {
 /* ── Product metrics (growth, funnel — separate from GoatCounter traffic above) ── */
 
 function ProductMetricsSection({ data }: { data: AdminProductMetrics }) {
-  const f = data.funnel;
-  const funnelSteps: { label: string; value: number }[] = [
-    { label: "Waitlist claims", value: f.claims },
-    { label: "Signed up", value: f.signed_up },
-    { label: "Created entity", value: f.created_entity },
-    { label: "Verified", value: f.verified },
-  ];
-
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
@@ -365,24 +512,7 @@ function ProductMetricsSection({ data }: { data: AdminProductMetrics }) {
         </div>
         <div style={{ ...glass, padding: "18px 20px" }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Claim → verified funnel</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {funnelSteps.map((s, i) => {
-              const max = funnelSteps[0].value || 1;
-              return (
-                <div key={s.label}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
-                    <span style={{ color: TEXT }}>{s.label}</span>
-                    <span style={{ color: MUTED, fontFamily: "ui-monospace,monospace", fontSize: 12 }}>
-                      {s.value}{i > 0 && funnelSteps[i - 1].value > 0 ? ` (${Math.round((100 * s.value) / funnelSteps[i - 1].value)}%)` : ""}
-                    </span>
-                  </div>
-                  <div style={{ height: 4, borderRadius: 2, background: "rgba(26,16,53,0.06)" }}>
-                    <div style={{ height: 4, borderRadius: 2, width: `${(s.value / max) * 100}%`, background: i === funnelSteps.length - 1 ? SUN : INDIGO }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <FunnelChart funnel={data.funnel} />
           {!data.registry_search_health.available && (
             <div style={{ fontSize: 11.5, color: MUTED, marginTop: 14 }}>
               Registry search health: {data.registry_search_health.note}

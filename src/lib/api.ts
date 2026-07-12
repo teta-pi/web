@@ -196,6 +196,9 @@ export const adminApi = {
 
   productMetrics: (token: string, days = 30) =>
     request<AdminProductMetrics>(`/admin/product-metrics?days=${days}`, {}, token),
+
+  healthCheck: (token: string) =>
+    request<AdminHealthCheck>("/admin/health-check", {}, token),
 };
 
 export interface AdminUser {
@@ -278,6 +281,13 @@ export interface AdminAnalytics {
   systems?: { name: string; total: number }[];
   locations?: { location: string; total: number }[];
   sizes?: { bucket: string; total: number }[];
+}
+
+export interface AdminHealthCheck {
+  checked_at: string;
+  api: { ok: boolean; status_code: number | null };
+  mcp: { ok: boolean; status_code: number | null };
+  stats: { ok: boolean; status_code: number | null };
 }
 
 export interface AdminProductMetrics {
