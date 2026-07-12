@@ -12,8 +12,9 @@ import {
   CameraIcon,
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
-import { devices, authApi, blockApi, businessApi } from "@/lib/api";
-import type { Block } from "@/lib/types";
+import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi } from "@/lib/api";
+import type { DomainVerifyInstructions, PublicLegalEntity } from "@/lib/api";
+import type { Block, Business } from "@/lib/types";
 
 // Public entity pages live on the app subdomain. Shared links are always the
 // production URL — a localhost link would be useless to whoever receives it.
@@ -462,6 +463,8 @@ function EditView({ mobile: m }: { mobile: boolean }) {
         }}
       />
 
+      <VerificationSection businessId={store.businessId} token={token} mobile={m} />
+
       <div style={{ height: 1, background: "rgba(26,16,53,0.08)", marginBottom: 24 }} />
 
       {/* Blocks header */}
@@ -555,6 +558,416 @@ function EditView({ mobile: m }: { mobile: boolean }) {
       )}
 
       <PiCamSection businessId={store.businessId} entityName={store.companyName} />
+    </div>
+  );
+}
+
+// ===== Verification methods chooser =====
+// Registry / Email / Domain are ACTIVE (each wires to its /verify/* endpoint and
+// writes an append-only verification_events row on success). Document Upload is
+// visible but DISABLED ("Coming soon") — it makes zero network calls until the
+// backend upload/review flow ships (docs/verification-rework.md §2). Below the
+// methods, the brand→verified-legal-entity link (the Google/Alphabet case, §3).
+
+const V_INDIGO = "#5B45C9";
+const V_SUN = "#F59A2E";
+const V_GREEN = "#3FA97C";
+const V_MUTED = "#9991AC";
+const V_TEXT = "#1A1035";
+const V_SEC = "#5A4F78";
+
+const vSectionLabel: React.CSSProperties = {
+  fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+  fontSize: 10.5, letterSpacing: "1.4px", textTransform: "uppercase", color: V_MUTED,
+};
+const vInput: React.CSSProperties = {
+  padding: "10px 13px", borderRadius: 9, border: "1.5px solid rgba(26,16,53,0.15)",
+  fontSize: 14, fontFamily: "inherit", color: V_TEXT, outline: "none", width: "100%",
+};
+function vBtn(kind: "primary" | "ghost", disabled?: boolean): React.CSSProperties {
+  if (kind === "primary")
+    return {
+      padding: "9px 16px", borderRadius: 9, border: "none",
+      background: disabled ? "rgba(91,69,201,0.35)" : "linear-gradient(180deg,#6E58D6,#5B45C9)",
+      color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+      cursor: disabled ? "default" : "pointer", whiteSpace: "nowrap",
+      display: "inline-flex", alignItems: "center", gap: 7,
+    };
+  return {
+    padding: "9px 16px", borderRadius: 9, border: "1px solid rgba(91,69,201,0.3)",
+    background: "rgba(91,69,201,0.06)", color: V_INDIGO, fontSize: 13, fontWeight: 600,
+    fontFamily: "inherit", cursor: disabled ? "default" : "pointer", whiteSpace: "nowrap",
+    display: "inline-flex", alignItems: "center", gap: 7, opacity: disabled ? 0.5 : 1,
+  };
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : "Something went wrong. Try again.";
+}
+
+// A copyable monospace value (DNS host/value, well-known content).
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: V_MUTED, marginBottom: 3 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <code style={{
+          flex: 1, fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: 12,
+          color: "#3A2C5C", background: "rgba(26,16,53,0.04)", border: "1px solid rgba(26,16,53,0.08)",
+          borderRadius: 7, padding: "7px 10px", wordBreak: "break-all",
+        }}>{value}</code>
+        <button
+          onClick={() => { navigator.clipboard?.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}
+          style={{ ...vBtn("ghost"), padding: "7px 12px" }}
+        >
+          {copied ? "✓" : "Copy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MethodCard({
+  title, desc, accent, right, children, disabled,
+}: {
+  title: string; desc: string; accent: string;
+  right?: React.ReactNode; children?: React.ReactNode; disabled?: boolean;
+}) {
+  return (
+    <div style={{
+      border: "1px solid rgba(255,255,255,0.7)",
+      borderLeft: `3px solid ${accent}`,
+      borderRadius: "0 13px 13px 0",
+      padding: "16px 18px",
+      marginBottom: 12,
+      background: disabled ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.45)",
+      backdropFilter: "blur(12px) saturate(130%)",
+      WebkitBackdropFilter: "blur(12px) saturate(130%)",
+      boxShadow: "0 6px 20px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
+      opacity: disabled ? 0.72 : 1,
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 260px" }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: V_TEXT }}>{title}</div>
+          <div style={{ fontSize: 12.5, color: V_MUTED, lineHeight: 1.5, marginTop: 3 }}>{desc}</div>
+        </div>
+        {right && <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>{right}</div>}
+      </div>
+      {children && <div style={{ marginTop: 14 }}>{children}</div>}
+    </div>
+  );
+}
+
+function StatusPill({ text, color }: { text: string; color: string }) {
+  return (
+    <span style={{
+      fontSize: 11.5, fontWeight: 600, color, background: `${color}18`,
+      padding: "5px 11px", borderRadius: 10, whiteSpace: "nowrap",
+      fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+    }}>{text}</span>
+  );
+}
+
+function VerificationSection({
+  businessId, token, mobile: m,
+}: { businessId: string | null; token: string | null; mobile: boolean }) {
+  // Registry
+  const [registryStatus, setRegistryStatus] = useState<string | null>(null);
+  const [registryBusy, setRegistryBusy] = useState(false);
+
+  // Business Email Control
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailCode, setEmailCode] = useState("");
+  const [emailDone, setEmailDone] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailErr, setEmailErr] = useState<string | null>(null);
+
+  // Domain Ownership
+  const [domainOpen, setDomainOpen] = useState(false);
+  const [domain, setDomain] = useState("");
+  const [domainInstr, setDomainInstr] = useState<DomainVerifyInstructions | null>(null);
+  const [domainDone, setDomainDone] = useState(false);
+  const [domainBusy, setDomainBusy] = useState(false);
+  const [domainErr, setDomainErr] = useState<string | null>(null);
+
+  // Brand → legal entity link
+  const [linked, setLinked] = useState<PublicLegalEntity | null>(null);
+  const [candidates, setCandidates] = useState<Business[]>([]);
+  const [selectedLegal, setSelectedLegal] = useState("");
+  const [legalBusy, setLegalBusy] = useState(false);
+  const [legalErr, setLegalErr] = useState<string | null>(null);
+
+  // Load current registry status, existing link (via the public payload, which
+  // BusinessOut omits), and candidate legal entities (own registry-verified ones).
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    (async () => {
+      const biz = await businessApi.get(businessId).catch(() => null);
+      if (cancelled) return;
+      if (biz) {
+        setRegistryStatus(biz.registry_status);
+        if (biz.slug) {
+          const pub = await publicProfileApi.bySlug(biz.slug).catch(() => null);
+          if (!cancelled && pub) setLinked(pub.legal_entity ?? null);
+        }
+      }
+      if (token) {
+        const list = await businessApi.list(token).catch(() => [] as Business[]);
+        if (!cancelled) {
+          setCandidates(list.filter((b) => b.registry_status === "verified" && b.id !== businessId));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId, token]);
+
+  if (!businessId) return null;
+
+  const pollRegistry = async (attempt: number) => {
+    const b = await businessApi.get(businessId).catch(() => null);
+    if (b) setRegistryStatus(b.registry_status);
+    const settled = b && (b.registry_status === "verified" || b.registry_status === "not_found");
+    if (settled || attempt >= 5) { setRegistryBusy(false); return; }
+    setTimeout(() => pollRegistry(attempt + 1), 2500);
+  };
+  const runRegistry = async () => {
+    if (!token) return;
+    setRegistryBusy(true);
+    try {
+      await verifyApi.registry(businessId, token);
+    } catch { setRegistryBusy(false); return; }
+    pollRegistry(0);
+  };
+
+  const sendEmailCode = async () => {
+    if (!token || !email.trim()) return;
+    setEmailBusy(true); setEmailErr(null);
+    try { await verifyApi.emailStart(businessId, email.trim(), token); setEmailSent(true); }
+    catch (e) { setEmailErr(errMsg(e)); }
+    finally { setEmailBusy(false); }
+  };
+  const confirmEmailCode = async () => {
+    if (!token || !emailCode.trim()) return;
+    setEmailBusy(true); setEmailErr(null);
+    try { await verifyApi.emailConfirm(businessId, email.trim(), emailCode.trim(), token); setEmailDone(true); }
+    catch (e) { setEmailErr(errMsg(e)); }
+    finally { setEmailBusy(false); }
+  };
+
+  const getDomainInstr = async () => {
+    if (!token || !domain.trim()) return;
+    setDomainBusy(true); setDomainErr(null);
+    try { const r = await verifyApi.domainStart(businessId, domain.trim(), token); setDomainInstr(r); }
+    catch (e) { setDomainErr(errMsg(e)); }
+    finally { setDomainBusy(false); }
+  };
+  const checkDomain = async () => {
+    if (!token || !domainInstr) return;
+    setDomainBusy(true); setDomainErr(null);
+    try {
+      const r = await verifyApi.domainCheck(businessId, domainInstr.domain, token);
+      if (r.verified) setDomainDone(true);
+      else setDomainErr("Not found yet — DNS TXT / the well-known file can take a few minutes to propagate. Try again shortly.");
+    } catch (e) { setDomainErr(errMsg(e)); }
+    finally { setDomainBusy(false); }
+  };
+
+  const linkLegal = async () => {
+    if (!token || !selectedLegal) return;
+    setLegalBusy(true); setLegalErr(null);
+    try {
+      const r = await verifyApi.linkLegalEntity(businessId, selectedLegal, token);
+      const c = candidates.find((x) => x.id === selectedLegal);
+      setLinked({ id: r.legal_entity_id, name: r.legal_entity_name, slug: c?.slug ?? "", registry_status: "verified" });
+      setSelectedLegal("");
+    } catch (e) { setLegalErr(errMsg(e)); }
+    finally { setLegalBusy(false); }
+  };
+  const unlinkLegal = async () => {
+    if (!token) return;
+    setLegalBusy(true); setLegalErr(null);
+    try { await verifyApi.unlinkLegalEntity(businessId, token); setLinked(null); }
+    catch (e) { setLegalErr(errMsg(e)); }
+    finally { setLegalBusy(false); }
+  };
+
+  const registryVerified = registryStatus === "verified";
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ ...vSectionLabel, marginBottom: 14 }}>Verification</div>
+
+      {/* Official Registry Match */}
+      <MethodCard
+        title="Official Registry Match"
+        desc="Match your legal name against Handelsregister, GLEIF or EU VAT."
+        accent={registryVerified ? V_INDIGO : "#B8B2C8"}
+        right={
+          registryVerified ? (
+            <StatusPill text="verified" color={V_INDIGO} />
+          ) : registryBusy ? (
+            <span style={{ display: "flex", alignItems: "center", gap: 7, color: V_MUTED, fontSize: 13 }}>
+              <SpinnerIcon size={14} /> Checking…
+            </span>
+          ) : (
+            <>
+              {registryStatus === "not_found" && <StatusPill text="not found" color={V_SUN} />}
+              <button onClick={runRegistry} style={vBtn("primary")}>
+                {registryStatus === "not_found" ? "Re-check" : "Verify now"}
+              </button>
+            </>
+          )
+        }
+      />
+
+      {/* Business Email Control */}
+      <MethodCard
+        title="Business Email Control"
+        desc="Confirm a magic code sent to an address on your own domain."
+        accent={emailDone ? V_INDIGO : "#B8B2C8"}
+        right={
+          emailDone ? (
+            <StatusPill text="verified" color={V_INDIGO} />
+          ) : (
+            <button onClick={() => setEmailOpen((o) => !o)} style={vBtn("ghost")}>
+              {emailOpen ? "Cancel" : "Verify"}
+            </button>
+          )
+        }
+      >
+        {emailOpen && !emailDone && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
+              <input
+                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@yourbrand.com" disabled={emailSent} style={vInput}
+              />
+              {!emailSent && (
+                <button onClick={sendEmailCode} disabled={emailBusy || !email.trim()} style={vBtn("primary", emailBusy || !email.trim())}>
+                  {emailBusy ? <SpinnerIcon size={12} /> : null} Send code
+                </button>
+              )}
+            </div>
+            {emailSent && (
+              <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
+                <input
+                  value={emailCode} onChange={(e) => setEmailCode(e.target.value)}
+                  placeholder="6-digit code" inputMode="numeric" style={vInput}
+                />
+                <button onClick={confirmEmailCode} disabled={emailBusy || !emailCode.trim()} style={vBtn("primary", emailBusy || !emailCode.trim())}>
+                  {emailBusy ? <SpinnerIcon size={12} /> : null} Confirm
+                </button>
+              </div>
+            )}
+            {emailSent && !emailErr && (
+              <div style={{ fontSize: 12, color: V_MUTED }}>Code sent to {email}. Free-mailbox domains (gmail, etc.) are rejected.</div>
+            )}
+            {emailErr && <div style={{ fontSize: 12.5, color: V_SUN }}>{emailErr}</div>}
+          </div>
+        )}
+      </MethodCard>
+
+      {/* Domain Ownership */}
+      <MethodCard
+        title="Domain Ownership"
+        desc="Prove control of your domain via a DNS TXT record or a well-known file."
+        accent={domainDone ? V_GREEN : "#B8B2C8"}
+        right={
+          domainDone ? (
+            <StatusPill text="verified" color={V_GREEN} />
+          ) : (
+            <button onClick={() => setDomainOpen((o) => !o)} style={vBtn("ghost")}>
+              {domainOpen ? "Cancel" : "Verify"}
+            </button>
+          )
+        }
+      >
+        {domainOpen && !domainDone && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 520 }}>
+            {!domainInstr ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
+                <input
+                  value={domain} onChange={(e) => setDomain(e.target.value)}
+                  placeholder="yourbrand.com" style={vInput}
+                />
+                <button onClick={getDomainInstr} disabled={domainBusy || !domain.trim()} style={vBtn("primary", domainBusy || !domain.trim())}>
+                  {domainBusy ? <SpinnerIcon size={12} /> : null} Get instructions
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 12.5, color: V_SEC, lineHeight: 1.55, marginBottom: 10 }}>
+                  Add <strong>either</strong> proof for <strong>{domainInstr.domain}</strong>, then check:
+                </div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: V_SEC, margin: "0 0 6px", letterSpacing: "0.4px" }}>DNS TXT record</div>
+                <CopyRow label="Host" value={domainInstr.dns_txt.host} />
+                <CopyRow label="Value" value={domainInstr.dns_txt.value} />
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: V_SEC, margin: "10px 0 6px", letterSpacing: "0.4px" }}>…or well-known file</div>
+                <CopyRow label={domainInstr.file.url} value={domainInstr.file.content} />
+                <button onClick={checkDomain} disabled={domainBusy} style={{ ...vBtn("primary", domainBusy), marginTop: 4 }}>
+                  {domainBusy ? <SpinnerIcon size={12} /> : null} Check now
+                </button>
+              </div>
+            )}
+            {domainErr && <div style={{ fontSize: 12.5, color: V_SUN, lineHeight: 1.5 }}>{domainErr}</div>}
+          </div>
+        )}
+      </MethodCard>
+
+      {/* Document Upload — visible but DISABLED, no network calls (Coming soon) */}
+      <MethodCard
+        title="Document Upload"
+        desc="Registration certificate, licence or tax ID — reviewed by our team."
+        accent="#D8D2E2"
+        disabled
+        right={<StatusPill text="Coming soon" color={V_MUTED} />}
+      />
+
+      {/* Brand → verified legal entity link */}
+      <div style={{ ...vSectionLabel, margin: "22px 0 12px" }}>Legal entity</div>
+      <MethodCard
+        title="Link to a verified legal entity"
+        desc="Inherit trust from a registry-verified entity you own (e.g. a brand → its parent company). Publicly disclosed on your page."
+        accent={linked ? V_INDIGO : "#B8B2C8"}
+        right={linked ? <StatusPill text="linked" color={V_INDIGO} /> : undefined}
+      >
+        {linked ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13.5, color: V_TEXT }}>
+              Linked to <strong>{linked.name}</strong>{" "}
+              <span style={{ fontSize: 12, color: V_MUTED }}>· registry-verified legal entity</span>
+            </div>
+            <button onClick={unlinkLegal} disabled={legalBusy} style={{ ...vBtn("ghost", legalBusy), marginLeft: "auto" }}>
+              {legalBusy ? <SpinnerIcon size={12} /> : null} Unlink
+            </button>
+          </div>
+        ) : candidates.length > 0 ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap", alignItems: "center" }}>
+            <select
+              value={selectedLegal} onChange={(e) => setSelectedLegal(e.target.value)}
+              style={{ ...vInput, cursor: "pointer" }}
+            >
+              <option value="">Choose a verified entity you own…</option>
+              {candidates.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <button onClick={linkLegal} disabled={legalBusy || !selectedLegal} style={vBtn("primary", legalBusy || !selectedLegal)}>
+              {legalBusy ? <SpinnerIcon size={12} /> : null} Link
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: V_MUTED, lineHeight: 1.5 }}>
+            No registry-verified entities to link yet. Registry-verify another entity you own first, then link it here.
+          </div>
+        )}
+        {legalErr && <div style={{ fontSize: 12.5, color: V_SUN, marginTop: 8 }}>{legalErr}</div>}
+      </MethodCard>
     </div>
   );
 }

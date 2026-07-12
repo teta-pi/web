@@ -30,6 +30,9 @@ interface PublicProfile {
   country: string | null;
   trust_level: string;
   registry: { registry: string | null; status: string; registry_id: string | null };
+  // Brand → verified legal entity link, publicly disclosed (not hidden) per
+  // docs/verification-rework.md §3.
+  legal_entity: { id: string; name: string; slug: string; registry_status: string } | null;
   agent_endpoint: string | null;
   agent_endpoint_verified: boolean;
   blocks: {
@@ -41,7 +44,8 @@ interface PublicProfile {
 }
 
 const LEVEL_COLORS: Record<string, string> = {
-  full: INDIGO, live: INDIGO, partial: "#7A68D4", registry: "#9088B0", none: "#B8B2C8",
+  full: INDIGO, live: INDIGO, partial: "#7A68D4", domain: "#3FA97C",
+  email: "#3F7FA0", registry: "#9088B0", none: "#B8B2C8",
 };
 
 export default function PublicEntityPage() {
@@ -112,12 +116,35 @@ export default function PublicEntityPage() {
                     registry:attested{profile.registry.registry_id ? ` · ${profile.registry.registry_id}` : ""}
                   </span>
                 )}
+                {profile.trust_level === "email" && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#3F7FA0", background: "rgba(63,127,160,0.10)", padding: "5px 12px", borderRadius: 10, fontFamily: "ui-monospace,monospace" }}>
+                    email:control · verified
+                  </span>
+                )}
+                {profile.trust_level === "domain" && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#3FA97C", background: "rgba(63,169,124,0.10)", padding: "5px 12px", borderRadius: 10, fontFamily: "ui-monospace,monospace" }}>
+                    dns:txt · verified
+                  </span>
+                )}
                 {profile.agent_endpoint && (
                   <span style={{ fontSize: 12, fontWeight: 600, color: profile.agent_endpoint_verified ? "#3FA97C" : MUTED, background: profile.agent_endpoint_verified ? "rgba(63,169,124,0.10)" : "rgba(26,16,53,0.05)", padding: "5px 12px", borderRadius: 10, fontFamily: "ui-monospace,monospace" }}>
                     mcp:{profile.agent_endpoint_verified ? "reachable" : "declared"}
                   </span>
                 )}
               </div>
+
+              {/* Brand → verified legal entity, publicly disclosed (not hidden) */}
+              {profile.legal_entity && (
+                <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(26,16,53,0.07)", fontSize: 13.5, color: TEXT_SEC }}>
+                  Legal entity:{" "}
+                  <Link href={`/e/${profile.legal_entity.slug}`} style={{ color: INDIGO, fontWeight: 600, textDecoration: "none" }}>
+                    {profile.legal_entity.name}
+                  </Link>
+                  {profile.legal_entity.registry_status === "verified" && (
+                    <span style={{ fontSize: 12, color: MUTED, marginLeft: 8, fontFamily: "ui-monospace,monospace" }}>registry-verified</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Blocks */}

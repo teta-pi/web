@@ -1,4 +1,11 @@
-export type VerificationLevel = "none" | "registry" | "partial" | "full" | "live";
+export type VerificationLevel =
+  | "none"
+  | "registry"
+  | "email"
+  | "domain"
+  | "partial"
+  | "full"
+  | "live";
 export type EntityType = "business" | "person" | "organization";
 
 export interface RegistryData {
@@ -42,7 +49,19 @@ export interface Business {
   description: string | null;
   country: string | null;
   registry_id: string | null;
-  registry_status: "pending" | "verified" | "failed" | "multiple_matches";
+  // "unverified" is the post-rework default (creation no longer runs a registry
+  // call); "not_found" is written when an explicit registry check finds no match.
+  registry_status:
+    | "unverified"
+    | "pending"
+    | "verified"
+    | "not_found"
+    | "failed"
+    | "multiple_matches";
+  // Optional: BusinessOut does not currently expose the brand→legal link
+  // (only the public by-slug payload discloses it). Present here for callers
+  // that read the link state from the public payload.
+  legal_entity_id?: string | null;
   registry_data: RegistryData | null;
   verification_level: VerificationLevel;
   ai_categories: Record<string, unknown> | null;
@@ -136,6 +155,8 @@ export interface IntentResolution {
 export const LEVEL_ACCENT: Record<VerificationLevel, string> = {
   none: "#9991AC",
   registry: "#B8B2C8",
+  email: "#3F7FA0",
+  domain: "#3FA97C",
   partial: "#E8640C",
   full: "#6B3FA0",
   live: "#6B3FA0",
@@ -144,6 +165,8 @@ export const LEVEL_ACCENT: Record<VerificationLevel, string> = {
 export const LEVEL_LABEL: Record<VerificationLevel, string> = {
   none: "Unverified",
   registry: "Registry Only",
+  email: "Email Verified",
+  domain: "Domain Verified",
   partial: "Partial",
   full: "Full Verification",
   live: "Live Verified",
@@ -152,6 +175,8 @@ export const LEVEL_LABEL: Record<VerificationLevel, string> = {
 export const LEVEL_HASH: Record<VerificationLevel, string> = {
   none: "",
   registry: "#registry:attested",
+  email: "#email:control · verified",
+  domain: "#dns:txt · verified",
   partial: "#btc:ts:confirmed · c2pa:pending",
   full: "#c2pa:verified · btc:ts:confirmed",
   live: "#c2pa:verified · btc:ts:confirmed · live",

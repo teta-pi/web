@@ -454,3 +454,62 @@ export const devices = {
   generateToken: (token: string): Promise<{ token: string; entity_id: string; entity_name: string; expires_in: number }> =>
     request("/devices/generate-token", { method: "POST" }, token),
 };
+
+// Verification methods (verification rework — docs/verification-rework.md §2).
+// Appended here because api.ts is append-only. Each method is owner-triggered
+// and writes an append-only verification_events row on success. Document upload
+// is intentionally absent — it is UI-only ("Coming soon") until the backend
+// upload/review flow ships, so there is no client call for it.
+
+// Instructions returned by /verify/domain/start — DNS TXT record + well-known
+// file token, same mechanism as the WordPress plugin.
+export interface DomainVerifyInstructions {
+  domain: string;
+  token: string;
+  dns_txt: { host: string; value: string };
+  file: { url: string; content: string };
+  expires_in: number;
+}
+
+// Public brand→legal-entity disclosure (from the by-slug/public payload).
+export interface PublicLegalEntity {
+  id: string;
+  name: string;
+  slug: string;
+  registry_status: string;
+}
+
+export const verifyApi = {
+  // Official Registry Match — runs in a background task; poll businessApi.get
+  // for registry_status ("verified" | "not_found") afterwards.
+  registry: (id: string, token: string): Promise<{ message: string }> =>
+    request(`/businesses/${id}/verify/registry`, { method: "POST" }, token),
+
+  // Business Email Control — 6-digit code to an address on the brand's domain.
+  emailStart: (id: string, email: string, token: string): Promise<{ message: string }> =>
+    request(`/businesses/${id}/verify/email/start`, { method: "POST", body: JSON.stringify({ email }) }, token),
+
+  emailConfirm: (id: string, email: string, code: string, token: string): Promise<{ verified: boolean; email: string }> =>
+    request(`/businesses/${id}/verify/email/confirm`, { method: "POST", body: JSON.stringify({ email, code }) }, token),
+
+  // Domain Ownership — get DNS TXT / well-known instructions, then check.
+  domainStart: (id: string, domain: string, token: string): Promise<DomainVerifyInstructions> =>
+    request(`/businesses/${id}/verify/domain/start`, { method: "POST", body: JSON.stringify({ domain }) }, token),
+
+  domainCheck: (id: string, domain: string, token: string): Promise<{ verified: boolean; domain?: string; method?: string }> =>
+    request(`/businesses/${id}/verify/domain/check`, { method: "POST", body: JSON.stringify({ domain }) }, token),
+
+  // Brand → verified legal entity link (Google→Alphabet). Publicly disclosed.
+  linkLegalEntity: (id: string, legalEntityId: string, token: string): Promise<{ legal_entity_id: string; legal_entity_name: string }> =>
+    request(`/businesses/${id}/legal-entity`, { method: "POST", body: JSON.stringify({ legal_entity_id: legalEntityId }) }, token),
+
+  unlinkLegalEntity: (id: string, token: string): Promise<{ legal_entity_id: null }> =>
+    request(`/businesses/${id}/legal-entity`, { method: "DELETE" }, token),
+};
+
+// Public entity payload by slug (powers /e/[slug]); read here to surface the
+// brand→legal-entity link in the owner dashboard, which BusinessOut omits.
+export const publicProfileApi = {
+  bySlug: (slug: string): Promise<{ legal_entity: PublicLegalEntity | null } & Record<string, unknown>> =>
+    request(`/businesses/by-slug/${slug}/public`),
+};
