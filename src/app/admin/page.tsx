@@ -609,7 +609,7 @@ function ClaimsTab({ token }: { token: string }) {
               <td style={{ ...td, fontFamily: "ui-monospace,monospace" }}>{c.position}</td>
               <td style={td}>{c.email}</td>
               <td style={td}>{c.entity_type}</td>
-              <td style={td}>{c.ready_to_pay ? <Badge text="$21 LOCKED" color={SUN} /> : <span style={{ color: MUTED }}>—</span>}</td>
+              <td style={td}>{c.ready_to_pay ? <Badge text="FOUNDING LOCKED" color={SUN} /> : <span style={{ color: MUTED }}>—</span>}</td>
               <td style={{ ...td, fontSize: 12, color: TEXT_SEC }}>{c.source?.utm_source ?? c.source?.referrer ?? "—"}</td>
               <td style={td}>{fmtDate(c.created_at)}</td>
             </tr>

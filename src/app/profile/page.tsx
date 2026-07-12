@@ -35,6 +35,26 @@ function mapServerBlock(b: Block): ProfileBlock {
   };
 }
 
+// Drag-to-reorder: snapshot the order captured at drag start so a failed save
+// can roll back. Only server-side blocks (real UUIDs) get persisted — unsaved
+// `block-N` blocks have no row to reorder yet.
+let dragSnapshot: ProfileBlock[] | null = null;
+
+// Persist the current block order to the backend. Sends only server-side block
+// ids (the endpoint assigns each its array index as `order`); on failure the
+// pre-drag order is restored so the UI never lies about what was saved.
+function persistBlockOrder(token: string | null) {
+  const snapshot = dragSnapshot;
+  dragSnapshot = null;
+  if (!snapshot) return;
+  const after = useProfileStore.getState().blocks;
+  const changed = after.some((b, i) => b.id !== snapshot[i]?.id);
+  if (!changed) return;
+  const ids = after.map((b) => b.id).filter(isServerBlock);
+  if (!token || ids.length < 2) return;
+  blockApi.reorder(ids, token).catch(() => useProfileStore.getState().setBlocks(snapshot));
+}
+
 // Debounced per-block PATCH. Flushes the latest title/desc from the store so
 // rapid edits across both fields never clobber each other.
 const blockSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -588,8 +608,24 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
     [block.id, store]
   );
 
+  // Live reorder while dragging over this card; keys keep DOM nodes stable so
+  // the drag isn't cancelled when the list shuffles. Persist happens on drag end.
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    const { dragId, blocks } = useProfileStore.getState();
+    if (!dragId || dragId === block.id) return;
+    const from = blocks.findIndex((b) => b.id === dragId);
+    const to = blocks.findIndex((b) => b.id === block.id);
+    if (from === -1 || to === -1 || from === to) return;
+    store.reorderBlocks(from, to);
+  };
+
+  const isDragging = store.dragId === block.id;
+
   return (
     <div
+      onDragOver={handleDragOver}
+      onDrop={(e) => e.preventDefault()}
       style={{
         border: "1px solid rgba(255,255,255,0.7)",
         borderLeft: `3px solid ${accentColor}`,
@@ -600,11 +636,25 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
         backdropFilter: "blur(12px) saturate(130%)",
         WebkitBackdropFilter: "blur(12px) saturate(130%)",
         boxShadow: "0 6px 20px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
+        opacity: isDragging ? 0.5 : 1,
       }}
     >
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editing ? 12 : 6 }}>
-        <span style={{ color: "#D8D2E2", fontSize: 16, cursor: "grab" }}>⠿</span>
+        <span
+          draggable
+          onDragStart={() => {
+            dragSnapshot = useProfileStore.getState().blocks;
+            store.setDragId(block.id);
+          }}
+          onDragEnd={() => {
+            store.setDragId(null);
+            persistBlockOrder(token);
+          }}
+          style={{ color: "#D8D2E2", fontSize: 16, cursor: "grab" }}
+        >
+          ⠿
+        </span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {!editing && (
             <span
