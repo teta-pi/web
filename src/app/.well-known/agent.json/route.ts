@@ -4,7 +4,7 @@ export async function GET() {
   return Response.json(
     {
       name: "TETA+PI Verification Protocol",
-      version: "1.3.1",
+      version: "1.4.0",
       description:
         "Trust infrastructure for digital entities — universal verification of people, companies, APIs, AI models, MCP servers, and agents via official registries, C2PA-signed media, and Bitcoin OpenTimestamps.",
       mcp_endpoint: "https://mcp.tetapi.dev",
