@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { EntityKind } from "@/lib/types";
 
 export type ProfileView = "edit" | "visitor" | "agent";
 export type NameStatus = "idle" | "checking" | "verified" | "not_found";
@@ -17,7 +18,7 @@ export interface ProfileBlock {
   media: BlockMedia | null;
 }
 
-export type ProfileEntityKind = "business" | "journalist" | "artist" | "organization";
+export type ProfileEntityKind = EntityKind;
 
 interface ProfileState {
   view: ProfileView;
