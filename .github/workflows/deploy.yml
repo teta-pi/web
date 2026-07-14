@@ -34,9 +34,18 @@ jobs:
 
       - name: Sync Next.js standalone
         run: |
+          # NOTE (5.3 split): pre-split, `next build` ran from the monorepo's
+          # web/ subdir, so standalone tracing baked in a nested `web/` folder
+          # (matching systemd's WorkingDirectory=/opt/tetapi/web/web). Now that
+          # this repo IS the app root, standalone output is flat — reconstruct
+          # the same on-disk layout by rsyncing one level deeper instead of
+          # changing the systemd unit.
+          ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 \
+            "mkdir -p /opt/tetapi/web/web"
+
           rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
             --delete --exclude='cache' \
-            .next/standalone/ root@164.90.235.66:/opt/tetapi/web/
+            .next/standalone/ root@164.90.235.66:/opt/tetapi/web/web/
 
           ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 \
             "mkdir -p /opt/tetapi/web/web/.next/static"
