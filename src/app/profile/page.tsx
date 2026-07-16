@@ -12,6 +12,7 @@ import {
   CameraIcon,
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi } from "@/lib/api";
 import type { DomainVerifyInstructions, PublicLegalEntity } from "@/lib/api";
 import type { Block, Business } from "@/lib/types";
@@ -23,6 +24,14 @@ const APP_ORIGIN = "https://app.tetapi.dev";
 
 // Local (unsaved) blocks use `block-N` ids; persisted blocks use server UUIDs.
 const isServerBlock = (id: string) => !id.startsWith("block-");
+
+// Effective session token everywhere on this page: /login and /settings
+// authenticate through useAuthStore ("tetapi-auth" in localStorage), while
+// /claim writes directly to useProfileStore + a bare "auth_token" localStorage
+// key. Each component reads `useAuthStore((s) => s.token)` first (reactive, so
+// it updates the moment a user signs in) and falls back to the claim flow's
+// token for users who arrived that way instead — see EditView, BlockCard and
+// PiCamSection below.
 
 // Map a persisted block from the API onto the store's block shape.
 function mapServerBlock(b: Block): ProfileBlock {
@@ -136,6 +145,7 @@ export default function ProfilePage() {
   const vw = useViewport();
   const m = vw < 640;
   const store = useProfileStore();
+  const sharedToken = useAuthStore((s) => s.token);
 
   // Public-page slug + published flag, for the "Share page" button.
   const [slug, setSlug] = useState<string | null>(null);
@@ -152,6 +162,23 @@ export default function ProfilePage() {
     if (kind) store.setEntityKind(kind);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A session that only ever went through /login (no /claim localStorage) has
+  // a useAuthStore token but no businessId — adopt the caller's own entity so
+  // Edit/Publish/Verify have something to act on instead of silently no-oping.
+  useEffect(() => {
+    if (!sharedToken || store.businessId) return;
+    let cancelled = false;
+    businessApi.list(sharedToken).then((list) => {
+      if (cancelled || useProfileStore.getState().businessId) return;
+      const own = list[0];
+      if (!own) return;
+      store.setBusinessId(own.id);
+      store.setEntityKind(own.entity_type === "organization" ? "organization" : own.entity_type === "person" ? "other" : "business");
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedToken, store.businessId]);
 
   // Load the entity + its persisted blocks once the entity id is known.
   useEffect(() => {
@@ -326,6 +353,7 @@ function SharePageButton({ slug, mobile: m }: { slug: string; mobile: boolean })
 // ===== Edit View =====
 function EditView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
+  const sharedToken = useAuthStore((s) => s.token);
   const [saving, setSaving] = useState(false);
   const isBusiness = store.entityKind === "business";
   const isPerson = isPersonKind(store.entityKind);
@@ -333,7 +361,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
   const namePlaceholder = isBusiness ? "Company name" : store.entityKind === "journalist" ? "Your full name" : store.entityKind === "creator" ? "Your name / stage name" : isPerson ? "Your name" : "Organization name";
   const descPlaceholder = isBusiness ? "What does your company do?" : store.entityKind === "journalist" ? "What do you cover? Where do you publish?" : store.entityKind === "creator" ? "Your medium, style, or practice." : isPerson ? "What do you do?" : "What does your organization do?";
 
-  const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+  const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -464,6 +492,8 @@ function EditView({ mobile: m }: { mobile: boolean }) {
           marginBottom: 32,
         }}
       />
+
+      <PublishSection businessId={store.businessId} token={token} mobile={m} />
 
       <VerificationSection businessId={store.businessId} token={token} mobile={m} />
 
@@ -974,13 +1004,89 @@ function VerificationSection({
   );
 }
 
+// ===== Publish & Privacy =====
+// Wires businessApi.publish / businessApi.setPrivacy — previously defined in
+// lib/api.ts but never called from any UI (audit #12).
+function PublishSection({
+  businessId, token, mobile: m,
+}: { businessId: string | null; token: string | null; mobile: boolean }) {
+  const [isPublished, setIsPublished] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [privacyBusy, setPrivacyBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    businessApi.get(businessId).then((biz) => {
+      if (cancelled) return;
+      setIsPublished(!!biz.is_published);
+      setIsPublic(biz.is_public !== false);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [businessId]);
+
+  if (!businessId) return null;
+
+  const doPublish = async () => {
+    if (!token) return;
+    setPublishBusy(true); setErr(null);
+    try { await businessApi.publish(businessId, token); setIsPublished(true); }
+    catch (e) { setErr(errMsg(e)); }
+    finally { setPublishBusy(false); }
+  };
+
+  const togglePrivacy = async () => {
+    if (!token) return;
+    const next = !isPublic;
+    setPrivacyBusy(true); setErr(null);
+    try { await businessApi.setPrivacy(businessId, next, token); setIsPublic(next); }
+    catch (e) { setErr(errMsg(e)); }
+    finally { setPrivacyBusy(false); }
+  };
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ ...vSectionLabel, marginBottom: 14 }}>Publish &amp; Privacy</div>
+      <MethodCard
+        title={isPublished ? "Your page is live" : "Publish your page"}
+        desc={
+          isPublished
+            ? isPublic
+              ? "Visible to visitors and discoverable by agents."
+              : "Live, but hidden — only reachable via direct link."
+            : "Make your page reachable at its public URL. You can unpublish or change visibility any time."
+        }
+        accent={isPublished ? (isPublic ? V_GREEN : V_MUTED) : "#B8B2C8"}
+        right={
+          isPublished ? (
+            <>
+              <StatusPill text={isPublic ? "public" : "private"} color={isPublic ? V_GREEN : V_MUTED} />
+              <button onClick={togglePrivacy} disabled={privacyBusy || !token} style={vBtn("ghost", privacyBusy || !token)}>
+                {privacyBusy ? <SpinnerIcon size={12} /> : null} {isPublic ? "Make private" : "Make public"}
+              </button>
+            </>
+          ) : (
+            <button onClick={doPublish} disabled={publishBusy || !token} style={vBtn("primary", publishBusy || !token)}>
+              {publishBusy ? <SpinnerIcon size={12} /> : null} Publish
+            </button>
+          )
+        }
+      />
+      {err && <div style={{ fontSize: 12.5, color: V_SUN, marginTop: -4, marginBottom: 8 }}>{err}</div>}
+    </div>
+  );
+}
+
 // ===== Block Card =====
 function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean }) {
   const store = useProfileStore();
+  const sharedToken = useAuthStore((s) => s.token);
   const fileRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(!block.title); // new blocks start in edit mode
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+  const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
   const removeBlock = () => {
     clearTimeout(blockSaveTimers.get(block.id));
@@ -1001,7 +1107,6 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
 
       // Real upload for file source
       if (source === "file" && file) {
-        const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
         if (token && store.businessId) {
           try {
             const { mediaApi } = await import("@/lib/api");
@@ -1020,7 +1125,7 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
         source === "pi_camera" ? 850 : 400
       );
     },
-    [block.id, store]
+    [block.id, store, token]
   );
 
   // Live reorder while dragging over this card; keys keep DOM nodes stable so
@@ -1261,15 +1366,19 @@ function MediaDisplay({
 // ===== Pi CAM Connect =====
 function PiCamSection({ businessId, entityName }: { businessId: string | null; entityName: string }) {
   const store = useProfileStore();
+  const sharedToken = useAuthStore((s) => s.token);
   const [qrData, setQrData] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
 
-  const authToken = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+  // Check the shared auth store (populated by /login and /settings) first, so
+  // users who already have a session there aren't asked to sign in again —
+  // falling back to the claim flow's token/localStorage for /claim users.
+  const authToken = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
   async function handleConnect() {
-    const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+    const token = authToken;
     if (!token) { setShowLogin(true); return; }
     setLoading(true);
     setError(null);
@@ -1339,6 +1448,7 @@ function PiCamSection({ businessId, entityName }: { businessId: string | null; e
           onSuccess={(token) => {
             localStorage.setItem("auth_token", token);
             store.setAuthToken(token);
+            useAuthStore.getState().setAuth(token);
             setShowLogin(false);
             setError(null);
           }}
