@@ -15,6 +15,7 @@ import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/u
 import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi } from "@/lib/api";
 import type { DomainVerifyInstructions, PublicLegalEntity } from "@/lib/api";
 import type { Block, Business } from "@/lib/types";
+import { isPersonKind, normalizeEntityKind } from "@/lib/types";
 
 // Public entity pages live on the app subdomain. Shared links are always the
 // production URL — a localhost link would be useless to whoever receives it.
@@ -147,7 +148,7 @@ export default function ProfilePage() {
     const entityId = localStorage.getItem("entity_id");
     if (token) store.setAuthToken(token);
     if (entityId) store.setBusinessId(entityId);
-    const kind = localStorage.getItem("entity_kind") as "business" | "journalist" | "artist" | "organization" | null;
+    const kind = normalizeEntityKind(localStorage.getItem("entity_kind"));
     if (kind) store.setEntityKind(kind);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -327,9 +328,10 @@ function EditView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
   const [saving, setSaving] = useState(false);
   const isBusiness = store.entityKind === "business";
+  const isPerson = isPersonKind(store.entityKind);
 
-  const namePlaceholder = isBusiness ? "Company name" : store.entityKind === "journalist" ? "Your full name" : store.entityKind === "artist" ? "Your name / stage name" : "Organization name";
-  const descPlaceholder = isBusiness ? "What does your company do?" : store.entityKind === "journalist" ? "What do you cover? Where do you publish?" : store.entityKind === "artist" ? "Your medium, style, or practice." : "What does your organization do?";
+  const namePlaceholder = isBusiness ? "Company name" : store.entityKind === "journalist" ? "Your full name" : store.entityKind === "creator" ? "Your name / stage name" : isPerson ? "Your name" : "Organization name";
+  const descPlaceholder = isBusiness ? "What does your company do?" : store.entityKind === "journalist" ? "What do you cover? Where do you publish?" : store.entityKind === "creator" ? "Your medium, style, or practice." : isPerson ? "What do you do?" : "What does your organization do?";
 
   const token = store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 

@@ -187,3 +187,36 @@ export const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
   person: "Person",
   organization: "Organization",
 };
+
+// What the user picks in onboarding. Two top-level choices — business or person —
+// and each expands into the sub-kinds below. This is a UI concept only: it maps
+// down to the API's three-value EntityType on create (see entityTypeForKind).
+export type EntityKind =
+  | "business"
+  | "organization"
+  | "journalist"
+  | "actor"
+  | "creator"
+  | "other";
+
+export const BUSINESS_KINDS: EntityKind[] = ["business", "organization"];
+export const PERSON_KINDS: EntityKind[] = ["journalist", "actor", "creator", "other"];
+
+export function isPersonKind(kind: EntityKind | null): boolean {
+  return kind !== null && PERSON_KINDS.includes(kind);
+}
+
+export function entityTypeForKind(kind: EntityKind | null): EntityType {
+  if (kind === null || kind === "business") return "business";
+  if (kind === "organization") return "organization";
+  return "person";
+}
+
+// Kinds are persisted in localStorage across the claim → profile handoff, so old
+// values have to keep working: "artist" was renamed to "creator" in task 3.7.
+export function normalizeEntityKind(raw: string | null): EntityKind | null {
+  if (!raw) return null;
+  if (raw === "artist") return "creator";
+  const known: EntityKind[] = [...BUSINESS_KINDS, ...PERSON_KINDS];
+  return known.includes(raw as EntityKind) ? (raw as EntityKind) : null;
+}
