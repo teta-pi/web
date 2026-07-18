@@ -54,7 +54,7 @@ interface ProfileState {
   setDragId: (id: string | null) => void;
   reorderBlocks: (from: number, to: number) => void;
   setBusinessId: (id: string) => void;
-  setAuthToken: (token: string) => void;
+  setAuthToken: (token: string | null) => void;
   setSavedAt: (d: Date | null) => void;
 }
 
