@@ -7,8 +7,24 @@ import type {
   RegistrySearchResult,
   SearchResult,
 } from "./types";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useProfileStore } from "@/stores/useProfileStore";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// A 401 always means the session is dead — never let it fail silently behind
+// a `.catch(() => {})`. Clears both stores + the claim flow's bare localStorage
+// key, and fires a DOM event so any mounted page (profile, settings, …) can
+// drop into a signed-out state instead of continuing to render as if the
+// stale token still worked.
+function handleUnauthorized() {
+  useAuthStore.getState().clearAuth();
+  useProfileStore.getState().setAuthToken(null);
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("auth_token");
+    window.dispatchEvent(new Event("teta:unauthorized"));
+  }
+}
 
 async function request<T>(
   path: string,
@@ -23,6 +39,7 @@ async function request<T>(
 
   const res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers });
   if (!res.ok) {
+    if (res.status === 401) handleUnauthorized();
     const error = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(
       typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail)
@@ -98,6 +115,7 @@ export const authApi = {
       body: form,
     });
     if (!res.ok) {
+      if (res.status === 401) handleUnauthorized();
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(typeof err.detail === "string" ? err.detail : "Upload failed");
     }
@@ -409,6 +427,7 @@ export const mediaApi = {
       body: form,
     });
     if (!res.ok) {
+      if (res.status === 401) handleUnauthorized();
       const error = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail));
     }

@@ -151,6 +151,17 @@ export default function ProfilePage() {
   const [slug, setSlug] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
 
+  // Set by lib/api.ts's centralized 401 handler (any request, anywhere on this
+  // page) — a dead token must never leave the page silently rendering as if
+  // the session were still good (QA #1). Once true, the tabs/edit surface are
+  // replaced with a sign-in gate until the user re-authenticates.
+  const [sessionInvalid, setSessionInvalid] = useState(false);
+  useEffect(() => {
+    const onUnauthorized = () => setSessionInvalid(true);
+    window.addEventListener("teta:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("teta:unauthorized", onUnauthorized);
+  }, []);
+
   // Restore auth session from localStorage (written by claim flow on Step 5)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -163,14 +174,22 @@ export default function ProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A session that only ever went through /login (no /claim localStorage) has
-  // a useAuthStore token but no businessId — adopt the caller's own entity so
-  // Edit/Publish/Verify have something to act on instead of silently no-oping.
+  // Validate whatever token we have on mount with an authenticated call —
+  // covers both /login sessions (useAuthStore) and /claim sessions (store's
+  // own authToken, restored above). Runs even when businessId is already
+  // known (claim-flow users have it from localStorage) so a stale token from
+  // yesterday gets caught immediately instead of only surfacing as "invalid
+  // token" the next time the user clicks something (QA #1/#2). A 401 here is
+  // handled centrally by lib/api.ts (clears both stores + localStorage, fires
+  // "teta:unauthorized"); we just use success to adopt an entity if needed.
   useEffect(() => {
-    if (!sharedToken || store.businessId) return;
+    const token = sharedToken ?? store.authToken;
+    if (!token) return;
     let cancelled = false;
-    businessApi.list(sharedToken).then((list) => {
-      if (cancelled || useProfileStore.getState().businessId) return;
+    businessApi.list(token).then((list) => {
+      if (cancelled) return;
+      setSessionInvalid(false);
+      if (useProfileStore.getState().businessId) return;
       const own = list[0];
       if (!own) return;
       store.setBusinessId(own.id);
@@ -178,7 +197,7 @@ export default function ProfilePage() {
     }).catch(() => {});
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sharedToken, store.businessId]);
+  }, [sharedToken, store.authToken]);
 
   // Load the entity + its persisted blocks once the entity id is known.
   useEffect(() => {
@@ -245,59 +264,122 @@ export default function ProfilePage() {
           position: "relative", zIndex: 1,
         }}
       >
-        {published && slug && <SharePageButton slug={slug} mobile={m} />}
+        {sessionInvalid ? (
+          <SignedOutPanel
+            onSignIn={(token) => {
+              localStorage.setItem("auth_token", token);
+              store.setAuthToken(token);
+              useAuthStore.getState().setAuth(token);
+              setSessionInvalid(false);
+            }}
+          />
+        ) : (
+          <>
+            {published && slug && <SharePageButton slug={slug} mobile={m} />}
 
-        {store.view === "edit" && <EditView mobile={m} />}
-        {store.view === "visitor" && <VisitorView mobile={m} />}
-        {store.view === "agent" && <AgentView mobile={m} />}
+            {store.view === "edit" && <EditView mobile={m} />}
+            {store.view === "visitor" && <VisitorView mobile={m} />}
+            {store.view === "agent" && <AgentView mobile={m} />}
+          </>
+        )}
       </div>
 
       {/* Fixed segmented control */}
+      {!sessionInvalid && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            padding: "4px",
+            gap: 2,
+            background: "rgba(255,255,255,0.55)",
+            border: "1px solid rgba(255,255,255,0.7)",
+            borderRadius: 14,
+            backdropFilter: "blur(14px) saturate(140%)",
+            WebkitBackdropFilter: "blur(14px) saturate(140%)",
+            boxShadow: "0 8px 26px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.9)",
+            zIndex: 30,
+          }}
+        >
+          {views.map(({ key, label }) => {
+            const active = store.view === key;
+            return (
+              <button
+                key={key}
+                onClick={() => store.setView(key)}
+                style={{
+                  padding: m ? "8px 12px" : "8px 16px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: active ? "linear-gradient(180deg,#6E58D6,#5B45C9)" : "transparent",
+                  color: active ? "#fff" : "#5A4F78",
+                  fontSize: m ? 12 : 13.5,
+                  fontWeight: active ? 600 : 400,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  transition: "all 0.16s",
+                  whiteSpace: "nowrap",
+                  boxShadow: active ? "0 3px 10px rgba(91,69,201,0.28)" : "none",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Signed-out gate =====
+// Replaces the whole edit/preview surface once a 401 clears the session
+// (QA #1) — never leave the page looking editable with a dead token.
+function SignedOutPanel({ onSignIn }: { onSignIn: (token: string) => void }) {
+  const [showModal, setShowModal] = useState(true);
+  return (
+    <>
       <div
         style={{
-          position: "fixed",
-          bottom: 24,
-          left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          padding: "4px",
-          gap: 2,
-          background: "rgba(255,255,255,0.55)",
           border: "1px solid rgba(255,255,255,0.7)",
-          borderRadius: 14,
-          backdropFilter: "blur(14px) saturate(140%)",
-          WebkitBackdropFilter: "blur(14px) saturate(140%)",
-          boxShadow: "0 8px 26px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.9)",
-          zIndex: 30,
+          borderRadius: 20,
+          background: "rgba(255,255,255,0.5)",
+          boxShadow: "0 16px 50px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.85)",
+          backdropFilter: "blur(20px) saturate(140%)",
+          WebkitBackdropFilter: "blur(20px) saturate(140%)",
+          padding: "56px 32px",
+          textAlign: "center",
         }}
       >
-        {views.map(({ key, label }) => {
-          const active = store.view === key;
-          return (
-            <button
-              key={key}
-              onClick={() => store.setView(key)}
-              style={{
-                padding: m ? "8px 12px" : "8px 16px",
-                borderRadius: 10,
-                border: "none",
-                background: active ? "linear-gradient(180deg,#6E58D6,#5B45C9)" : "transparent",
-                color: active ? "#fff" : "#5A4F78",
-                fontSize: m ? 12 : 13.5,
-                fontWeight: active ? 600 : 400,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                transition: "all 0.16s",
-                whiteSpace: "nowrap",
-                boxShadow: active ? "0 3px 10px rgba(91,69,201,0.28)" : "none",
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#1A1035", marginBottom: 10 }}>
+          Your session expired
+        </div>
+        <div style={{ fontSize: 14.5, color: "#5A4F78", lineHeight: 1.6, marginBottom: 22, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+          Sign in again to keep editing your profile.
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          style={{
+            padding: "10px 22px",
+            border: "1px solid rgba(91,69,201,0.3)", borderRadius: 10,
+            background: "rgba(91,69,201,0.06)", color: "#5B45C9", fontSize: 13.5, fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit",
+          }}
+        >
+          Sign in
+        </button>
       </div>
-    </div>
+      {showModal && (
+        <SignInModal
+          onSuccess={(token) => { onSignIn(token); setShowModal(false); }}
+          onClose={() => setShowModal(false)}
+          subtitle="Your session expired — sign in again to keep editing."
+        />
+      )}
+    </>
   );
 }
 
@@ -1468,7 +1550,7 @@ function PiCamSection({ businessId, entityName }: { businessId: string | null; e
 }
 
 // ===== Sign-in modal =====
-function SignInModal({ onSuccess, onClose }: { onSuccess: (token: string) => void; onClose: () => void }) {
+function SignInModal({ onSuccess, onClose, subtitle }: { onSuccess: (token: string) => void; onClose: () => void; subtitle?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1511,7 +1593,7 @@ function SignInModal({ onSuccess, onClose }: { onSuccess: (token: string) => voi
           Sign in to TETA+PI
         </div>
         <div style={{ fontSize: 13, color: "#9991AC", marginBottom: 24 }}>
-          Required to generate a Pi CAM linking QR code.
+          {subtitle ?? "Required to generate a Pi CAM linking QR code."}
         </div>
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <input
