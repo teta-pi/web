@@ -203,6 +203,18 @@ export default function ProfilePage() {
   useEffect(() => {
     const businessId = store.businessId;
     if (!businessId) return;
+    // The store is a module-level singleton, not scoped to an entity — switching
+    // to a different one (e.g. creating a second page under the same account)
+    // must not leave the previous entity's name/description/blocks/registry
+    // badge on screen while this fetch is in flight (QA #18). Reset up front,
+    // and assign the fetched values unconditionally below so a genuinely empty
+    // field on the new entity clears the old one too, instead of only doing so
+    // when the new value happens to be truthy.
+    store.setCompanyName("");
+    store.setDescription("");
+    store.setBlocks([]);
+    store.setNameStatus("idle");
+    store.setRegistryData(null);
     let cancelled = false;
     (async () => {
       const [biz, blocks] = await Promise.all([
@@ -211,8 +223,8 @@ export default function ProfilePage() {
       ]);
       if (cancelled) return;
       if (biz) {
-        if (biz.name) store.setCompanyName(biz.name);
-        if (biz.description) store.setDescription(biz.description);
+        store.setCompanyName(biz.name ?? "");
+        store.setDescription(biz.description ?? "");
         setSlug(biz.slug ?? null);
         setPublished(!!biz.is_published);
       }
@@ -277,7 +289,10 @@ export default function ProfilePage() {
           <>
             {published && slug && <SharePageButton slug={slug} mobile={m} />}
 
-            {store.view === "edit" && <EditView mobile={m} />}
+            {/* Remount on entity switch: VerificationSection/PublishSection/BlockCard
+                keep their own useState (registryStatus, emailDone, linked, isPublished…)
+                that has no other trigger to clear when businessId changes (QA #18). */}
+            {store.view === "edit" && <EditView key={store.businessId ?? "new"} mobile={m} />}
             {store.view === "visitor" && <VisitorView mobile={m} />}
             {store.view === "agent" && <AgentView mobile={m} />}
           </>
