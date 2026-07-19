@@ -387,6 +387,7 @@ export default function SearchPage() {
 
 function ResultRow({ result: r, mobile: m, last }: { result: DisplaySearchResult; mobile: boolean; last: boolean }) {
   const [hovered, setHovered] = useState(false);
+  const isBusinessType = r.entity_type === "business" || r.entity_type === "organization";
 
   return (
     <div
@@ -436,15 +437,17 @@ function ResultRow({ result: r, mobile: m, last }: { result: DisplaySearchResult
         {r.badgePills.map((b) => <BadgePill key={b.text} text={b.text} />)}
       </div>
 
-      {/* Registry line */}
-      <div style={{ margin: "14px 0 0 18px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, color: "#3A2C5C", letterSpacing: "0.1px" }}>
-          <IsoChip code={r.iso} />
-          {r.authority}
-        </span>
-        <span style={{ color: "#C9C2D8" }}>·</span>
-        <span style={{ color: "#5A4F78" }}>{r.requirement}</span>
-      </div>
+      {/* Registry line — business/organization only */}
+      {isBusinessType && (r.authority || r.registryId) && (
+        <div style={{ margin: "14px 0 0 18px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, color: "#3A2C5C", letterSpacing: "0.1px" }}>
+            <IsoChip code={r.iso} />
+            {r.authority}
+          </span>
+          <span style={{ color: "#C9C2D8" }}>·</span>
+          <span style={{ color: "#5A4F78" }}>{r.requirement}</span>
+        </div>
+      )}
 
       {/* Mono meta */}
       <div style={{
@@ -452,8 +455,12 @@ function ResultRow({ result: r, mobile: m, last }: { result: DisplaySearchResult
         fontSize: 11, color: "#9991AC", letterSpacing: "0.3px",
         margin: "7px 0 0 18px", display: "flex", gap: 10, flexWrap: "wrap",
       }}>
-        <span style={{ color: "#5A4F78" }}>{r.registryId}</span>
-        <span style={{ color: "#C9C2D8" }}>·</span>
+        {isBusinessType && r.registryId && (
+          <>
+            <span style={{ color: "#5A4F78" }}>{r.registryId}</span>
+            <span style={{ color: "#C9C2D8" }}>·</span>
+          </>
+        )}
         <span>{r.hash}</span>
       </div>
     </div>

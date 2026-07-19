@@ -15,7 +15,7 @@ import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/u
 import { useAuthStore } from "@/stores/useAuthStore";
 import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi } from "@/lib/api";
 import type { DomainVerifyInstructions, PublicLegalEntity } from "@/lib/api";
-import type { Block, Business } from "@/lib/types";
+import type { Block, Business, EntityKind } from "@/lib/types";
 import { isPersonKind, normalizeEntityKind } from "@/lib/types";
 
 // Public entity pages live on the app subdomain. Shared links are always the
@@ -592,7 +592,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
 
       <PublishSection businessId={store.businessId} token={token} mobile={m} />
 
-      <VerificationSection businessId={store.businessId} token={token} mobile={m} />
+      <VerificationSection businessId={store.businessId} token={token} mobile={m} entityKind={store.entityKind} />
 
       <div style={{ height: 1, background: "rgba(26,16,53,0.08)", marginBottom: 24 }} />
 
@@ -799,11 +799,16 @@ function StatusPill({ text, color }: { text: string; color: string }) {
 }
 
 function VerificationSection({
-  businessId, token, mobile: m,
-}: { businessId: string | null; token: string | null; mobile: boolean }) {
+  businessId, token, mobile: m, entityKind,
+}: { businessId: string | null; token: string | null; mobile: boolean; entityKind: EntityKind }) {
+  // Registry / Document Upload / Legal-entity link are business concepts — a
+  // persona account (journalist/actor/creator/other) only gets Email + Domain.
+  const isBusinessKind = !isPersonKind(entityKind);
+
   // Registry
   const [registryStatus, setRegistryStatus] = useState<string | null>(null);
   const [registryBusy, setRegistryBusy] = useState(false);
+  const [registryTimedOut, setRegistryTimedOut] = useState(false);
 
   // Business Email Control
   const [emailOpen, setEmailOpen] = useState(false);
@@ -829,6 +834,21 @@ function VerificationSection({
   const [legalBusy, setLegalBusy] = useState(false);
   const [legalErr, setLegalErr] = useState<string | null>(null);
 
+  // Continues polling a check already in flight (started before this mount,
+  // or left running past the previous poll's attempt cap) as well as one just
+  // started by runRegistry. Reaching the cap while still "pending" means the
+  // backend job is real but slow — that's surfaced as "still processing",
+  // not silently dropped back to a plain "Verify now" button (QA #13).
+  const pollRegistry = async (attempt: number) => {
+    if (!businessId) return;
+    const b = await businessApi.get(businessId).catch(() => null);
+    if (b) setRegistryStatus(b.registry_status);
+    const settled = b && (b.registry_status === "verified" || b.registry_status === "not_found");
+    if (settled) { setRegistryBusy(false); return; }
+    if (attempt >= 5) { setRegistryBusy(false); setRegistryTimedOut(true); return; }
+    setTimeout(() => pollRegistry(attempt + 1), 2500);
+  };
+
   // Load current registry status, existing link (via the public payload, which
   // BusinessOut omits), and candidate legal entities (own registry-verified ones).
   useEffect(() => {
@@ -839,12 +859,13 @@ function VerificationSection({
       if (cancelled) return;
       if (biz) {
         setRegistryStatus(biz.registry_status);
-        if (biz.slug) {
+        if (biz.registry_status === "pending") { setRegistryBusy(true); pollRegistry(0); }
+        if (isBusinessKind && biz.slug) {
           const pub = await publicProfileApi.bySlug(biz.slug).catch(() => null);
           if (!cancelled && pub) setLinked(pub.legal_entity ?? null);
         }
       }
-      if (token) {
+      if (isBusinessKind && token) {
         const list = await businessApi.list(token).catch(() => [] as Business[]);
         if (!cancelled) {
           setCandidates(list.filter((b) => b.registry_status === "verified" && b.id !== businessId));
@@ -853,20 +874,14 @@ function VerificationSection({
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, token]);
+  }, [businessId, token, isBusinessKind]);
 
   if (!businessId) return null;
 
-  const pollRegistry = async (attempt: number) => {
-    const b = await businessApi.get(businessId).catch(() => null);
-    if (b) setRegistryStatus(b.registry_status);
-    const settled = b && (b.registry_status === "verified" || b.registry_status === "not_found");
-    if (settled || attempt >= 5) { setRegistryBusy(false); return; }
-    setTimeout(() => pollRegistry(attempt + 1), 2500);
-  };
   const runRegistry = async () => {
     if (!token) return;
     setRegistryBusy(true);
+    setRegistryTimedOut(false);
     try {
       await verifyApi.registry(businessId, token);
     } catch { setRegistryBusy(false); return; }
@@ -931,33 +946,39 @@ function VerificationSection({
     <div style={{ marginBottom: 32 }}>
       <div style={{ ...vSectionLabel, marginBottom: 14 }}>Verification</div>
 
-      {/* Official Registry Match */}
-      <MethodCard
-        title="Official Registry Match"
-        desc="Match your legal name against Handelsregister, GLEIF or EU VAT."
-        accent={registryVerified ? V_INDIGO : "#B8B2C8"}
-        right={
-          registryVerified ? (
-            <StatusPill text="verified" color={V_INDIGO} />
-          ) : registryBusy ? (
-            <span style={{ display: "flex", alignItems: "center", gap: 7, color: V_MUTED, fontSize: 13 }}>
-              <SpinnerIcon size={14} /> Checking…
-            </span>
-          ) : (
-            <>
-              {registryStatus === "not_found" && <StatusPill text="not found" color={V_SUN} />}
-              <button onClick={runRegistry} style={vBtn("primary")}>
-                {registryStatus === "not_found" ? "Re-check" : "Verify now"}
-              </button>
-            </>
-          )
-        }
-      />
+      {/* Official Registry Match — business/organization only */}
+      {isBusinessKind && (
+        <MethodCard
+          title="Official Registry Match"
+          desc="Match your legal name against Handelsregister, GLEIF or EU VAT."
+          accent={registryVerified ? V_INDIGO : "#B8B2C8"}
+          right={
+            registryVerified ? (
+              <StatusPill text="verified" color={V_INDIGO} />
+            ) : registryBusy ? (
+              <span style={{ display: "flex", alignItems: "center", gap: 7, color: V_MUTED, fontSize: 13 }}>
+                <SpinnerIcon size={14} /> Checking…
+              </span>
+            ) : registryTimedOut ? (
+              <span style={{ display: "flex", alignItems: "center", gap: 7, color: V_MUTED, fontSize: 13 }}>
+                Still processing — check back shortly
+              </span>
+            ) : (
+              <>
+                {registryStatus === "not_found" && <StatusPill text="not found" color={V_SUN} />}
+                <button onClick={runRegistry} style={vBtn("primary")}>
+                  {registryStatus === "not_found" ? "Re-check" : "Verify now"}
+                </button>
+              </>
+            )
+          }
+        />
+      )}
 
-      {/* Business Email Control */}
+      {/* Email Control */}
       <MethodCard
-        title="Business Email Control"
-        desc="Confirm a magic code sent to an address on your own domain."
+        title={isBusinessKind ? "Business Email Control" : "Email Control"}
+        desc={isBusinessKind ? "Confirm a magic code sent to an address on your own domain." : "Confirm a magic code sent to an email address you control."}
         accent={emailDone ? V_INDIGO : "#B8B2C8"}
         right={
           emailDone ? (
@@ -1048,55 +1069,63 @@ function VerificationSection({
         )}
       </MethodCard>
 
-      {/* Document Upload — visible but DISABLED, no network calls (Coming soon) */}
-      <MethodCard
-        title="Document Upload"
-        desc="Registration certificate, licence or tax ID — reviewed by our team."
-        accent="#D8D2E2"
-        disabled
-        right={<StatusPill text="Coming soon" color={V_MUTED} />}
-      />
+      {/* Document Upload — visible but DISABLED, no network calls (Coming soon).
+          Business/organization only (registration certificate, licence, tax ID). */}
+      {isBusinessKind && (
+        <MethodCard
+          title="Document Upload"
+          desc="Registration certificate, licence or tax ID — reviewed by our team."
+          accent="#D8D2E2"
+          disabled
+          right={<StatusPill text="Coming soon" color={V_MUTED} />}
+        />
+      )}
 
-      {/* Brand → verified legal entity link */}
-      <div style={{ ...vSectionLabel, margin: "22px 0 12px" }}>Legal entity</div>
-      <MethodCard
-        title="Link to a verified legal entity"
-        desc="Inherit trust from a registry-verified entity you own (e.g. a brand → its parent company). Publicly disclosed on your page."
-        accent={linked ? V_INDIGO : "#B8B2C8"}
-        right={linked ? <StatusPill text="linked" color={V_INDIGO} /> : undefined}
-      >
-        {linked ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 13.5, color: V_TEXT }}>
-              Linked to <strong>{linked.name}</strong>{" "}
-              <span style={{ fontSize: 12, color: V_MUTED }}>· registry-verified legal entity</span>
-            </div>
-            <button onClick={unlinkLegal} disabled={legalBusy} style={{ ...vBtn("ghost", legalBusy), marginLeft: "auto" }}>
-              {legalBusy ? <SpinnerIcon size={12} /> : null} Unlink
-            </button>
-          </div>
-        ) : candidates.length > 0 ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap", alignItems: "center" }}>
-            <select
-              value={selectedLegal} onChange={(e) => setSelectedLegal(e.target.value)}
-              style={{ ...vInput, cursor: "pointer" }}
-            >
-              <option value="">Choose a verified entity you own…</option>
-              {candidates.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <button onClick={linkLegal} disabled={legalBusy || !selectedLegal} style={vBtn("primary", legalBusy || !selectedLegal)}>
-              {legalBusy ? <SpinnerIcon size={12} /> : null} Link
-            </button>
-          </div>
-        ) : (
-          <div style={{ fontSize: 12.5, color: V_MUTED, lineHeight: 1.5 }}>
-            No registry-verified entities to link yet. Registry-verify another entity you own first, then link it here.
-          </div>
-        )}
-        {legalErr && <div style={{ fontSize: 12.5, color: V_SUN, marginTop: 8 }}>{legalErr}</div>}
-      </MethodCard>
+      {/* Brand → verified legal entity link — business/organization only; the
+          brand→parent-company concept doesn't apply to a person account. */}
+      {isBusinessKind && (
+        <>
+          <div style={{ ...vSectionLabel, margin: "22px 0 12px" }}>Legal entity</div>
+          <MethodCard
+            title="Link to a verified legal entity"
+            desc="Inherit trust from a registry-verified entity you own (e.g. a brand → its parent company). Publicly disclosed on your page."
+            accent={linked ? V_INDIGO : "#B8B2C8"}
+            right={linked ? <StatusPill text="linked" color={V_INDIGO} /> : undefined}
+          >
+            {linked ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 13.5, color: V_TEXT }}>
+                  Linked to <strong>{linked.name}</strong>{" "}
+                  <span style={{ fontSize: 12, color: V_MUTED }}>· registry-verified legal entity</span>
+                </div>
+                <button onClick={unlinkLegal} disabled={legalBusy} style={{ ...vBtn("ghost", legalBusy), marginLeft: "auto" }}>
+                  {legalBusy ? <SpinnerIcon size={12} /> : null} Unlink
+                </button>
+              </div>
+            ) : candidates.length > 0 ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap", alignItems: "center" }}>
+                <select
+                  value={selectedLegal} onChange={(e) => setSelectedLegal(e.target.value)}
+                  style={{ ...vInput, cursor: "pointer" }}
+                >
+                  <option value="">Choose a verified entity you own…</option>
+                  {candidates.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <button onClick={linkLegal} disabled={legalBusy || !selectedLegal} style={vBtn("primary", legalBusy || !selectedLegal)}>
+                  {legalBusy ? <SpinnerIcon size={12} /> : null} Link
+                </button>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: V_MUTED, lineHeight: 1.5 }}>
+                No registry-verified entities to link yet. Registry-verify another entity you own first, then link it here.
+              </div>
+            )}
+            {legalErr && <div style={{ fontSize: 12.5, color: V_SUN, marginTop: 8 }}>{legalErr}</div>}
+          </MethodCard>
+        </>
+      )}
     </div>
   );
 }
