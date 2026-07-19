@@ -135,13 +135,13 @@ export default function SearchPage() {
     searchApi
       .search(query.trim(), "any", undefined, 20)
       .then((results) => {
-        setApiResults(results.length > 0 ? results.map(toDisplay) : null);
+        setApiResults(results.map(toDisplay));
       })
-      .catch(() => setApiResults(null))
+      .catch(() => setApiResults([]))
       .finally(() => setSearching(false));
   }, [submitted, query]);
 
-  const pool = apiResults ?? SEED_RESULTS;
+  const pool = submitted ? (apiResults ?? []) : SEED_RESULTS;
 
   const filteredResults: DisplaySearchResult[] = pool.filter((r) => {
     if (filter === "full" && r.verification_level !== "full") return false;
