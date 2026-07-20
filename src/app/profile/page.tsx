@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import QRCode from "react-qr-code";
-import { Wordmark } from "@/components/ui/Wordmark";
-import AccountMenu from "@/components/AccountMenu";
+import AppHeader, { APP_HEADER_H } from "@/components/AppHeader";
 import { BadgePill } from "@/components/ui/BadgePill";
 import { IsoChip } from "@/components/ui/IsoChip";
 import {
@@ -218,27 +217,24 @@ export default function ProfilePage() {
         fontFamily: "'Manrope','Trebuchet MS','Segoe UI',sans-serif",
         color: "#1A1035",
         position: "relative",
-        overflow: "hidden",
+        // "clip", not "hidden" — see page.tsx for why (phantom scroll container).
+        overflow: "clip",
       }}
     >
       {/* Color washes */}
       <div style={{ position: "absolute", top: -160, left: -130, width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,rgba(91,69,201,0.22),transparent 68%)", filter: "blur(34px)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", bottom: -180, right: -150, width: 560, height: 560, borderRadius: "50%", background: "radial-gradient(circle,rgba(245,154,46,0.18),transparent 68%)", filter: "blur(38px)", pointerEvents: "none" }} />
 
-      {/* Corner logo */}
-      <div style={{ position: "fixed", top: m ? 16 : 22, left: m ? 16 : 28, zIndex: 20 }}>
-        <Wordmark size="sm" />
-      </div>
-
-      {/* Account menu */}
-      <AccountMenu />
+      {/* Fixed translucent app header — logo + avatar, offset below the
+          under-construction banner (QA #10/#24). */}
+      <AppHeader />
 
       {/* Content */}
       <div
         style={{
           maxWidth: 880,
           margin: "0 auto",
-          padding: m ? "72px 16px 100px" : "80px 24px 100px",
+          padding: m ? `${APP_HEADER_H + 24}px 16px 100px` : `${APP_HEADER_H + 32}px 24px 100px`,
           position: "relative", zIndex: 1,
         }}
       >

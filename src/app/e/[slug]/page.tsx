@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import AccountMenu from "@/components/AccountMenu";
+import AppHeader from "@/components/AppHeader";
 
 const INDIGO = "#5B45C9";
 const SUN = "#F59A2E";
@@ -63,12 +63,7 @@ export default function PublicEntityPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)", color: TEXT, fontFamily: "'Manrope','Trebuchet MS','Segoe UI',sans-serif", position: "relative" }}>
-      <Link href="/" style={{ position: "fixed", top: 26, left: 30, zIndex: 10, textDecoration: "none", display: "flex", alignItems: "baseline", gap: 7 }}>
-        <span style={{ fontSize: 20, fontWeight: 700, color: INDIGO }}>Θ</span>
-        <span style={{ fontSize: 15, fontWeight: 300, color: TEXT }}>+</span>
-        <span style={{ fontSize: 18, fontWeight: 700, color: SUN }}>π</span>
-      </Link>
-      <AccountMenu />
+      <AppHeader />
 
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "110px 24px 80px" }}>
         {notFound && (

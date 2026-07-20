@@ -10,7 +10,7 @@ const INDIGO = "#5B45C9";
 
 /** Avatar button + dropdown (My Page / Settings / Log out).
  *  Renders a "Create account →" pill when logged out. */
-export default function AccountMenu({ fixed = true }: { fixed?: boolean }) {
+export default function AccountMenu({ fixed = true, top = 20 }: { fixed?: boolean; top?: number | string }) {
   const { token, user, clearAuth } = useAuthStore();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -34,7 +34,7 @@ export default function AccountMenu({ fixed = true }: { fixed?: boolean }) {
   }, []);
 
   const wrapStyle: React.CSSProperties = fixed
-    ? { position: "fixed", top: 20, right: 24, zIndex: 40 }
+    ? { position: "fixed", top, right: 24, zIndex: 40 }
     : { position: "relative" };
 
   if (!mounted) return null;
