@@ -42,45 +42,6 @@ function useViewport() {
   return vw;
 }
 
-const PAIRING_CODE = `PI-${Math.random().toString(36).slice(2, 6).toUpperCase()}-9QX1`;
-
-/* ── Pseudo-QR ── */
-function PseudoQR() {
-  const size = 160, modules = 21, cell = size / modules;
-
-  const finderPattern = (ox: number, oy: number) => {
-    const cells = [];
-    for (let r = 0; r < 7; r++) {
-      for (let c = 0; c < 7; c++) {
-        const border = r === 0 || r === 6 || c === 0 || c === 6;
-        const inner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-        if (border || inner) cells.push(<rect key={`${ox}-${oy}-${r}-${c}`} x={(ox + c) * cell} y={(oy + r) * cell} width={cell} height={cell} fill={TEXT} />);
-      }
-    }
-    return cells;
-  };
-
-  const dataModules = [];
-  for (let r = 0; r < modules; r++) {
-    for (let c = 0; c < modules; c++) {
-      const inFinder = (r < 9 && c < 9) || (r < 9 && c > modules - 9) || (r > modules - 9 && c < 9);
-      if (!inFinder && Math.random() > 0.5) {
-        dataModules.push(<rect key={`d-${r}-${c}`} x={c * cell} y={r * cell} width={cell} height={cell} fill={TEXT} />);
-      }
-    }
-  }
-
-  return (
-    <svg width={size} height={size} style={{ display: "block" }}>
-      <rect width={size} height={size} fill="white" />
-      {dataModules}
-      {finderPattern(0, 0)}
-      {finderPattern(modules - 7, 0)}
-      {finderPattern(0, modules - 7)}
-    </svg>
-  );
-}
-
 /* ── Glass container shared wrapper ── */
 function PageShell({ children, m }: { children: React.ReactNode; m: boolean }) {
   return (
@@ -89,14 +50,17 @@ function PageShell({ children, m }: { children: React.ReactNode; m: boolean }) {
       background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)",
       color: TEXT,
       position: "relative",
-      overflow: "hidden",
+      // "clip", not "hidden" — see page.tsx (home) for why: this wizard's own
+      // step transitions change content height enough to trigger it (phantom
+      // scroll container hiding the progress rail after a step change).
+      overflow: "clip",
       fontFamily: "'Manrope','Trebuchet MS','Segoe UI',sans-serif",
     }}>
       {/* Color washes */}
       <div style={{ position: "absolute", top: -160, left: -130, width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,rgba(91,69,201,0.22),transparent 68%)", filter: "blur(34px)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", bottom: -180, right: -150, width: 560, height: 560, borderRadius: "50%", background: "radial-gradient(circle,rgba(245,154,46,0.18),transparent 68%)", filter: "blur(38px)", pointerEvents: "none" }} />
       <div style={{ position: "relative", zIndex: 1 }}>
-        <Link href="/" style={{ position: "fixed", top: m ? 16 : 26, left: m ? 16 : 30, zIndex: 20, textDecoration: "none" }}>
+        <Link href="/" style={{ position: "fixed", top: `calc(var(--banner-h) + ${m ? 16 : 26}px)`, left: m ? 16 : 30, zIndex: 20, textDecoration: "none" }}>
           <Wordmark />
         </Link>
         {children}
@@ -192,6 +156,11 @@ export default function ClaimPage() {
 
   useEffect(() => { if (store.step !== 1) setNameCheck("idle"); }, [store.step]);
 
+  // Each step is a fresh screen — start it scrolled to the top instead of
+  // wherever the previous step left off (otherwise the progress rail can
+  // render above the fold, e.g. when clicking through on a short viewport).
+  useEffect(() => { window.scrollTo(0, 0); }, [store.step]);
+
   // Register the claim in the waitlist once the user is authed (idempotent on email)
   useEffect(() => {
     if (!store.authed || !store.accountEmail || claimSubmittedRef.current) return;
@@ -242,7 +211,10 @@ export default function ClaimPage() {
     return () => clearTimeout(debounceRef.current);
   }, [store.query, store.step]);
 
-  const STEP_LABELS = ["Identify", "Verify", "Camera", "Publish"];
+  // Camera step is hidden until 14.x's device-link flow is confirmed working
+  // on a real device (docs/known-issues.md QA #11/#33) — the rail only ever
+  // shows Identify/Verify here; Publish is the Step 4 success screen below.
+  const STEP_LABELS = ["Identify", "Verify", "Publish"];
 
   /* ── Step 0: Entry — pick a type ── */
   if (store.step === 0) {
@@ -375,10 +347,10 @@ export default function ClaimPage() {
     );
   }
 
-  /* ── Steps 1–3 ── */
-  if (store.step >= 1 && store.step <= 3) {
+  /* ── Steps 1–2 (Camera step hidden — see STEP_LABELS note above) ── */
+  if (store.step === 1 || store.step === 2) {
     const stepIndex = store.step - 1;
-    const progressPct = `${store.step * 25}%`;
+    const progressPct = `${(store.step / STEP_LABELS.length) * 100}%`;
     const trustChipLabel = store.authed ? "Email verified" : "Unverified — free to create";
     const trustChipColor = store.authed ? INDIGO : MUTED;
 
@@ -394,7 +366,7 @@ export default function ClaimPage() {
                 <span style={{ fontSize: 12.5, color: TEXT_AUTH, letterSpacing: "0.2px" }}>{trustChipLabel}</span>
               </span>
               <span style={{ fontFamily: "ui-monospace,'SF Mono','Menlo',monospace", fontSize: 11, color: MUTED, letterSpacing: "0.6px" }}>
-                STEP {store.step} / 4
+                STEP {store.step} / {STEP_LABELS.length}
               </span>
             </div>
             <div style={{ height: 2, background: "rgba(26,16,53,0.07)", borderRadius: 2, overflow: "hidden" }}>
@@ -606,7 +578,7 @@ export default function ClaimPage() {
                           const res = await authApi.verifyCode(emailInput.trim(), emailCode);
                           store.setToken(res.access_token);
                           useAuthStore.getState().setAuth(res.access_token, { email: emailInput.trim() } as never);
-                          store.setAuthed(true); store.setStep(3);
+                          store.setAuthed(true); store.setStep(4);
                         } catch (err) {
                           const msg = err instanceof Error ? err.message : "";
                           setEmailError(
@@ -627,47 +599,6 @@ export default function ClaimPage() {
               )}
               <div style={{ marginTop: 20 }}>
                 <span onClick={() => store.setStep(1)} style={{ fontSize: 13, color: MUTED, cursor: "pointer" }}>← Change name</span>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 3: Camera pairing (the entity is being created in the background) ── */}
-          {store.step === 3 && (
-            <div>
-              <div style={{ fontSize: m ? 26 : 32, fontWeight: 600, letterSpacing: "-0.7px", marginBottom: 10 }}>Link your PI Camera.</div>
-              <div style={{ fontSize: 16, fontWeight: 300, lineHeight: 1.6, color: TEXT_SEC, marginBottom: creating ? 12 : 32, maxWidth: 500 }}>
-                Pair once. Then any clip you shoot is C2PA-signed on the device and flows straight into your blocks.
-              </div>
-              {creating && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, fontSize: 13, color: TEXT_SEC }}>
-                  <SpinnerIcon size={14} /> Creating your profile…
-                </div>
-              )}
-              {createError && <div style={{ marginBottom: 16, fontSize: 13, color: SUN }}>{createError}</div>}
-
-              <div style={{ display: "flex", gap: 30, alignItems: "center", flexWrap: "wrap", marginBottom: 32 }}>
-                <div style={{
-                  flexShrink: 0, padding: 16,
-                  border: "1px solid rgba(26,16,53,0.10)", borderRadius: 14,
-                  background: "rgba(255,255,255,0.82)",
-                  boxShadow: "0 8px 26px rgba(45,55,120,0.08), inset 0 1px 0 rgba(255,255,255,0.9)",
-                }}>
-                  <PseudoQR />
-                </div>
-                <div style={{ flex: 1, minWidth: 240 }}>
-                  <div style={{ fontFamily: "ui-monospace,'SF Mono','Menlo',monospace", fontSize: 12, color: MUTED, letterSpacing: "0.4px", marginBottom: 6 }}>PAIRING CODE</div>
-                  <div style={{ fontFamily: "ui-monospace,'SF Mono','Menlo',monospace", fontSize: 22, color: TEXT_AUTH, letterSpacing: "2px", fontWeight: 600, marginBottom: 18 }}>{PAIRING_CODE}</div>
-                  <div style={{ fontSize: 14, color: TEXT_SEC, lineHeight: 1.55, maxWidth: 280 }}>
-                    Open PI Camera, go to <span style={{ color: TEXT_AUTH, fontWeight: 600 }}>Settings → Link account</span>, and scan this code or enter the pairing code above.
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <BtnPrimary onClick={() => { store.setPaired(true); store.setStep(4); }}>I&apos;ve linked my camera →</BtnPrimary>
-                <span onClick={() => store.setStep(4)} style={{ fontSize: 14, color: TEXT_SEC, cursor: "pointer", textAlign: "center" }}>
-                  Skip for now — link later
-                </span>
               </div>
             </div>
           )}
@@ -714,9 +645,11 @@ export default function ClaimPage() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10, fontSize: 12, color: MUTED }}>
               <span>{store.accountEmail || "—"}</span>
+              {creating && <><span style={{ color: DOT }}>·</span><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><SpinnerIcon size={11} /> Saving profile…</span></>}
               {store.createdEntityId && <><span style={{ color: DOT }}>·</span><span style={{ color: "#22B07D" }}>✓ Profile saved</span></>}
               {store.paired && <><span style={{ color: DOT }}>·</span><span style={{ color: INDIGO }}>✓ PI Camera linked</span></>}
             </div>
+            {createError && <div style={{ marginTop: 10, fontSize: 12.5, color: SUN }}>{createError}</div>}
           </div>
 
           {/* Maturity strip */}

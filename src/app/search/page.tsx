@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { searchApi } from "@/lib/api";
 import type { SearchResult } from "@/lib/types";
 import { LEVEL_ACCENT, LEVEL_LABEL, ENTITY_TYPE_LABEL } from "@/lib/types";
+import AppHeader from "@/components/AppHeader";
 
 const INDIGO = "#5B45C9";
 const TEXT = "#1A1035";
@@ -117,13 +118,8 @@ function SearchPageInner() {
       background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)",
       color: TEXT,
     }}>
+      <AppHeader />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "96px 32px 80px" }}>
-        <Link href="/" style={{ position: "fixed", top: 26, left: 30, zIndex: 10, textDecoration: "none", display: "flex", alignItems: "baseline", gap: 7 }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: INDIGO, lineHeight: 1, letterSpacing: -0.5 }}>Θ</span>
-          <span style={{ fontSize: 15, fontWeight: 300, color: TEXT, lineHeight: 1 }}>+</span>
-          <span style={{ fontSize: 18, fontWeight: 700, color: "#F59A2E", lineHeight: 1 }}>π</span>
-        </Link>
-
         {/* Search bar */}
         <div style={{
           display: "flex", alignItems: "center", gap: 14,

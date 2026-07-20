@@ -165,7 +165,11 @@ export default function SearchPage() {
       background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)",
       color: "#1A1035",
       position: "relative",
-      overflow: "hidden",
+      // "clip" (not "hidden") — hidden makes this a real, if invisible,
+      // scroll container once content exceeds 100vh; a focus/layout shift
+      // can then scroll it internally and strand the fixed chrome above
+      // whatever's visible, with no scrollbar to notice by. Clip only clips.
+      overflow: "clip",
     }}>
       {/* Color washes */}
       <div style={{ position: "absolute", top: -160, left: -130, width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,rgba(91,69,201,0.26),transparent 68%)", filter: "blur(34px)", animation: "floatA 28s ease-in-out infinite", pointerEvents: "none" }} />
@@ -173,13 +177,13 @@ export default function SearchPage() {
 
       <div style={{ position: "relative", zIndex: 1 }}>
         {/* Corner logo */}
-        <div style={{ position: "fixed", top: m ? 16 : 26, left: m ? 16 : 30, zIndex: 10, cursor: "pointer", userSelect: "none" }}
+        <div style={{ position: "fixed", top: `calc(var(--banner-h) + ${m ? 16 : 26}px)`, left: m ? 16 : 30, zIndex: 10, cursor: "pointer", userSelect: "none" }}
           onClick={() => { setSubmitted(false); setQuery(""); }}>
           <Wordmark size="sm" />
         </div>
 
         {/* Account menu / Create account */}
-        <AccountMenu />
+        <AccountMenu top="calc(var(--banner-h) + 20px)" />
 
         {/* ===== EMPTY STATE ===== */}
         {!submitted && (

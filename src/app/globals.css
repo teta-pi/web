@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  --banner-h: 40px;
   --indigo: #5B45C9;
   --indigo-grad: linear-gradient(180deg,#6E58D6,#5B45C9);
   --sun: #F59A2E;
@@ -169,4 +170,50 @@ a {
 
 .mono {
   font-family: ui-monospace,'SF Mono','Menlo',monospace;
+}
+
+/* Fixed under-construction banner (QA #8). Height lives in --banner-h so
+   every page's fixed chrome (AppHeader, and the standalone logo on
+   login/claim/home) can offset itself the same way regardless of whether
+   the banner is one line (desktop) or wraps to two (narrow mobile, where
+   the full sentence doesn't fit even at unreadably small font sizes). */
+.tp-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--banner-h);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: #FFD60A;
+  color: #1A1035;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-content-offset {
+  padding-top: var(--banner-h);
+}
+
+@media (max-width: 640px) {
+  :root {
+    --banner-h: 56px;
+  }
+  .tp-banner {
+    height: auto;
+    min-height: var(--banner-h);
+    white-space: normal;
+    font-size: 12px;
+    line-height: 1.35;
+    padding: 8px 20px;
+  }
 }

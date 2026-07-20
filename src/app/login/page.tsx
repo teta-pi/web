@@ -57,7 +57,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)", fontFamily: "'Manrope','Trebuchet MS','Segoe UI',sans-serif", color: TEXT, position: "relative" }}>
-      <Link href="/" style={{ position: "fixed", top: 26, left: 30, textDecoration: "none", display: "flex", alignItems: "baseline", gap: 7 }}>
+      <Link href="/" style={{ position: "fixed", top: "calc(var(--banner-h) + 26px)", left: 30, textDecoration: "none", display: "flex", alignItems: "baseline", gap: 7 }}>
         <span style={{ fontSize: 20, fontWeight: 700, color: INDIGO }}>Θ</span>
         <span style={{ fontSize: 15, fontWeight: 300, color: TEXT }}>+</span>
         <span style={{ fontSize: 18, fontWeight: 700, color: SUN }}>π</span>
