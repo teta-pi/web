@@ -25,6 +25,7 @@ interface ProfileState {
   entityKind: ProfileEntityKind;
   companyName: string;
   nameStatus: NameStatus;
+  registryStatus: string | null;
   registryData: {
     iso: string;
     authority: string;
@@ -44,6 +45,7 @@ interface ProfileState {
   setEntityKind: (kind: ProfileEntityKind) => void;
   setCompanyName: (name: string) => void;
   setNameStatus: (status: NameStatus) => void;
+  setRegistryStatus: (status: string | null) => void;
   setRegistryData: (data: ProfileState["registryData"]) => void;
   setDescription: (desc: string) => void;
   addBlock: (block?: ProfileBlock) => void;
@@ -65,6 +67,7 @@ export const useProfileStore = create<ProfileState>((set) => ({
   entityKind: "business",
   companyName: "",
   nameStatus: "idle",
+  registryStatus: null,
   registryData: null,
   description: "",
   blocks: [],
@@ -77,6 +80,7 @@ export const useProfileStore = create<ProfileState>((set) => ({
   setEntityKind: (entityKind) => set({ entityKind }),
   setCompanyName: (companyName) => set({ companyName }),
   setNameStatus: (nameStatus) => set({ nameStatus }),
+  setRegistryStatus: (registryStatus) => set({ registryStatus }),
   setRegistryData: (registryData) => set({ registryData }),
   setDescription: (description) => set({ description }),
   addBlock: (block) =>

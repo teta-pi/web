@@ -94,52 +94,6 @@ function useViewport() {
   return vw;
 }
 
-// Real registry check debounce (business only)
-function useRegistryCheck(name: string, enabled: boolean) {
-  const store = useProfileStore();
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-
-  useEffect(() => {
-    if (!enabled) {
-      store.setNameStatus("idle");
-      store.setRegistryData(null);
-      return;
-    }
-    if (!name.trim()) {
-      store.setNameStatus("idle");
-      store.setRegistryData(null);
-      return;
-    }
-    store.setNameStatus("checking");
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const { searchApi } = await import("@/lib/api");
-        const results = await searchApi.searchRegistry(name.trim());
-        if (results.length > 0) {
-          const r = results[0];
-          store.setNameStatus("verified");
-          store.setRegistryData({
-            iso: r.country || "",
-            authority: r.registry,
-            registryId: r.registration_number,
-            status: r.status || "active",
-            city: r.address || "",
-            since: r.founded || "",
-          });
-        } else {
-          store.setNameStatus("not_found");
-          store.setRegistryData(null);
-        }
-      } catch {
-        store.setNameStatus("not_found");
-        store.setRegistryData(null);
-      }
-    }, 900);
-    return () => clearTimeout(debounceRef.current);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, enabled]);
-}
 
 export default function ProfilePage() {
   const vw = useViewport();
@@ -214,6 +168,7 @@ export default function ProfilePage() {
     store.setDescription("");
     store.setBlocks([]);
     store.setNameStatus("idle");
+    store.setRegistryStatus(null);
     store.setRegistryData(null);
     let cancelled = false;
     (async () => {
@@ -225,6 +180,19 @@ export default function ProfilePage() {
       if (biz) {
         store.setCompanyName(biz.name ?? "");
         store.setDescription(biz.description ?? "");
+        store.setRegistryStatus(biz.registry_status ?? null);
+        if (biz.registry_status === "verified" && biz.registry_data) {
+          store.setRegistryData({
+            iso: biz.country || "",
+            authority: biz.registry_data.registry,
+            registryId: biz.registry_data.registration_number,
+            status: biz.registry_data.status,
+            city: biz.registry_data.address || "",
+            since: biz.registry_data.founded || "",
+          });
+        } else {
+          store.setRegistryData(null);
+        }
         setSlug(biz.slug ?? null);
         setPublished(!!biz.is_published);
       }
@@ -235,8 +203,6 @@ export default function ProfilePage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.businessId]);
-
-  useRegistryCheck(store.companyName, store.entityKind === "business");
 
   const views: Array<{ key: ProfileView; label: string }> = [
     { key: "edit", label: "Edit" },
@@ -515,12 +481,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
       <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         {isBusiness ? (
           <>
-            {store.nameStatus === "checking" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9991AC", fontSize: 13 }}>
-                <SpinnerIcon size={15} /> Checking registry…
-              </div>
-            )}
-            {store.nameStatus === "verified" && store.registryData && (
+            {store.registryStatus === "verified" && store.registryData && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#5B45C9", fontSize: 13.5, fontWeight: 600 }}>
                   <VerificationIcon size={16} />✓ Verified in registry
@@ -532,7 +493,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
                 </span>
               </div>
             )}
-            {store.nameStatus === "not_found" && (
+            {store.registryStatus === "not_found" && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#F59A2E", fontSize: 13.5 }}>
                 ✗ Not found in connected registries
               </div>
@@ -1802,7 +1763,7 @@ function VisitorView({ mobile: m }: { mobile: boolean }) {
   const isBusiness = store.entityKind === "business";
   const hasC2pa = store.blocks.some((b) => b.media?.phase === "done" && b.media.source === "pi_camera");
   const level = isBusiness
-    ? store.nameStatus === "verified" ? "registry" : "unverified"
+    ? store.registryStatus === "verified" ? "registry" : "unverified"
     : hasC2pa ? "full" : "email";
   const accentColor = level === "full" ? "#5B45C9" : level === "email" ? "#5B45C9" : level === "registry" ? "#B8B2C8" : "#D8D2E2";
   const levelLabel = level === "full" ? "Full Verification" : level === "email" ? "Email Verified" : level === "registry" ? "Registry Only" : "Unverified";
@@ -1914,7 +1875,7 @@ function AgentView({ mobile: m }: { mobile: boolean }) {
       ? "full"
       : store.blocks.some((b) => b.media?.phase === "done")
       ? "partial"
-      : isBusiness && store.nameStatus === "verified"
+      : isBusiness && store.registryStatus === "verified"
       ? "registry"
       : !isBusiness
       ? "email_verified"
@@ -1927,7 +1888,7 @@ function AgentView({ mobile: m }: { mobile: boolean }) {
       name: store.companyName || "Name",
       description: store.description || null,
     },
-    registry: isBusiness && store.registryData
+    registry: isBusiness && store.registryStatus === "verified" && store.registryData
       ? {
           status: "verified",
           registry: store.registryData.authority,
