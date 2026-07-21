@@ -82,6 +82,8 @@ jobs:
             "/e/[slug]/page": "app/e/[slug]/page.js",
             "/search/page": "app/search/page.js",
             "/.well-known/agent.json/route": "app/.well-known/agent.json/route.js",
+            "/icon.svg/route": "app/icon.svg/route.js",
+            "/apple-icon.png/route": "app/apple-icon.png/route.js",
             "/_not-found/page": "app/_not-found/page.js"
           }
           JSON
