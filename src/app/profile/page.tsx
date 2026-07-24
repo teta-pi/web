@@ -9,6 +9,12 @@ import {
   VerificationIcon,
   SpinnerIcon,
   CameraIcon,
+  BuildingIcon,
+  MailIcon,
+  GlobeIcon,
+  DocumentIcon,
+  LinkIcon,
+  ShieldIcon,
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -30,7 +36,7 @@ const isServerBlock = (id: string) => !id.startsWith("block-");
 // key. Each component reads `useAuthStore((s) => s.token)` first (reactive, so
 // it updates the moment a user signs in) and falls back to the claim flow's
 // token for users who arrived that way instead — see EditView, BlockCard and
-// PiCamSection below.
+// PiCamButton below.
 
 // Map a persisted block from the API onto the store's block shape.
 function mapServerBlock(b: Block): ProfileBlock {
@@ -251,9 +257,9 @@ export default function ProfilePage() {
           <>
             {published && slug && <SharePageButton slug={slug} mobile={m} />}
 
-            {/* Remount on entity switch: VerificationSection/PublishSection/BlockCard
-                keep their own useState (registryStatus, emailDone, linked, isPublished…)
-                that has no other trigger to clear when businessId changes (QA #18). */}
+            {/* Remount on entity switch: VerifyMenu/BlockCard keep their own
+                useState (registryStatus, emailDone, linked, isPublished…) that
+                has no other trigger to clear when businessId changes (QA #18). */}
             {store.view === "edit" && <EditView key={store.businessId ?? "new"} mobile={m} />}
             {store.view === "visitor" && <VisitorView mobile={m} />}
             {store.view === "agent" && <AgentView mobile={m} />}
@@ -410,10 +416,19 @@ function SharePageButton({ slug, mobile: m }: { slug: string; mobile: boolean })
 }
 
 // ===== Edit View =====
+// Blocks-first layout (QA #29): content blocks are the primary object on the
+// page, rendered immediately after name/description. Verifiers + Registry
+// Match + Document Upload + Legal Entity + Publish&Privacy collapse into one
+// compact icon menu (QA #28/#31) below the blocks, not full-width strips.
+// Name/description default to read-only with an explicit Edit→Save toggle
+// (QA #26/#27) instead of always-editable fields.
 function EditView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
   const [saving, setSaving] = useState(false);
+  // New/empty profiles start in edit mode (nothing to show yet); an existing
+  // filled-in profile starts read-only until the user explicitly hits Edit.
+  const [fieldsEditing, setFieldsEditing] = useState(!store.companyName);
   const isBusiness = store.entityKind === "business";
   const isPerson = isPersonKind(store.entityKind);
 
@@ -437,6 +452,7 @@ function EditView({ mobile: m }: { mobile: boolean }) {
     }
     store.setSavedAt(new Date());
     setSaving(false);
+    setFieldsEditing(false);
   };
 
   // Persist the new block up front so it has a real id (needed for media upload).
@@ -455,23 +471,38 @@ function EditView({ mobile: m }: { mobile: boolean }) {
 
   return (
     <div>
-      {/* Name input */}
-      <input
-        value={store.companyName}
-        onChange={(e) => store.setCompanyName(e.target.value)}
-        placeholder={namePlaceholder}
-        style={{
-          width: "100%",
-          fontSize: m ? 32 : 44,
-          fontWeight: 600,
-          letterSpacing: "-1px",
-          color: "#1A1035",
-          border: "none",
-          background: "transparent",
-          fontFamily: "inherit",
-          marginBottom: 10,
-        }}
-      />
+      {/* Name */}
+      {fieldsEditing ? (
+        <input
+          value={store.companyName}
+          onChange={(e) => store.setCompanyName(e.target.value)}
+          placeholder={namePlaceholder}
+          autoFocus
+          style={{
+            width: "100%",
+            fontSize: m ? 32 : 44,
+            fontWeight: 600,
+            letterSpacing: "-1px",
+            color: "#1A1035",
+            border: "none",
+            background: "transparent",
+            fontFamily: "inherit",
+            marginBottom: 10,
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            fontSize: m ? 32 : 44,
+            fontWeight: 600,
+            letterSpacing: "-1px",
+            color: "#1A1035",
+            marginBottom: 10,
+          }}
+        >
+          {store.companyName || <span style={{ color: "#D8D2E2" }}>{namePlaceholder}</span>}
+        </div>
+      )}
 
       {/* Status row */}
       <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -502,64 +533,77 @@ function EditView({ mobile: m }: { mobile: boolean }) {
           </div>
         )}
 
-        {/* Save controls */}
+        {/* Edit / Save toggle — defaults to "Edit", becomes "Save" only once
+            the user has actually entered edit mode (QA #26/#27). */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-          {store.savedAt && !saving && (
+          {store.savedAt && !fieldsEditing && !saving && (
             <span style={{ fontSize: 12, color: "#9991AC" }}>
               Saved {store.savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
           <button
-            onClick={handleSave}
+            onClick={fieldsEditing ? handleSave : () => setFieldsEditing(true)}
             disabled={saving}
             style={{
               padding: "7px 16px", borderRadius: 8,
-              background: saving ? "rgba(91,69,201,0.12)" : "linear-gradient(180deg,#6E58D6,#5B45C9)",
-              color: saving ? "#9991AC" : "#fff",
-              fontSize: 13, fontWeight: 600, border: "none",
-              boxShadow: saving ? "none" : "0 4px 12px rgba(91,69,201,0.28)",
+              background: saving ? "rgba(91,69,201,0.12)" : fieldsEditing ? "linear-gradient(180deg,#6E58D6,#5B45C9)" : "rgba(91,69,201,0.06)",
+              color: saving ? "#9991AC" : fieldsEditing ? "#fff" : "#5B45C9",
+              fontSize: 13, fontWeight: 600, border: fieldsEditing ? "none" : "1px solid rgba(91,69,201,0.3)",
+              boxShadow: fieldsEditing && !saving ? "0 4px 12px rgba(91,69,201,0.28)" : "none",
               cursor: saving ? "default" : "pointer", fontFamily: "inherit",
               display: "flex", alignItems: "center", gap: 6,
             }}
           >
-            {saving ? <><SpinnerIcon size={12} /> Saving…</> : "Save"}
+            {saving ? <><SpinnerIcon size={12} /> Saving…</> : fieldsEditing ? "Save" : "Edit"}
           </button>
         </div>
       </div>
 
       {/* Description */}
-      <textarea
-        value={store.description}
-        onChange={(e) => store.setDescription(e.target.value)}
-        placeholder={descPlaceholder}
-        rows={3}
-        style={{
-          width: "100%",
-          fontSize: 17,
-          fontWeight: 300,
-          color: "#5A4F78",
-          border: "none",
-          background: "transparent",
-          fontFamily: "inherit",
-          resize: "vertical",
-          lineHeight: 1.6,
-          marginBottom: 32,
-        }}
-      />
+      {fieldsEditing ? (
+        <textarea
+          value={store.description}
+          onChange={(e) => store.setDescription(e.target.value)}
+          placeholder={descPlaceholder}
+          rows={3}
+          style={{
+            width: "100%",
+            fontSize: 17,
+            fontWeight: 300,
+            color: "#5A4F78",
+            border: "none",
+            background: "transparent",
+            fontFamily: "inherit",
+            resize: "vertical",
+            lineHeight: 1.6,
+            marginBottom: 32,
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            fontSize: 17,
+            fontWeight: 300,
+            color: store.description ? "#5A4F78" : "#D8D2E2",
+            lineHeight: 1.6,
+            marginBottom: 32,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {store.description || "No description yet."}
+        </div>
+      )}
 
-      <PublishSection businessId={store.businessId} token={token} mobile={m} />
-
-      <VerificationSection businessId={store.businessId} token={token} mobile={m} entityKind={store.entityKind} />
-
-      <div style={{ height: 1, background: "rgba(26,16,53,0.08)", marginBottom: 24 }} />
-
-      {/* Blocks header */}
+      {/* Blocks — the primary object on the page (QA #29), right after the
+          identity fields, well above the verification/publish menu. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 20,
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -586,6 +630,11 @@ function EditView({ mobile: m }: { mobile: boolean }) {
             </span>
           )}
         </div>
+
+        {/* Connect Camera lives next to the blocks it feeds, not buried in
+            the verification menu (QA #30) — the capture→block relationship
+            is meant to be obvious at a glance. */}
+        <PiCamButton businessId={store.businessId} entityName={store.companyName} />
       </div>
 
       {/* Empty state */}
@@ -643,7 +692,11 @@ function EditView({ mobile: m }: { mobile: boolean }) {
         </div>
       )}
 
-      <PiCamSection businessId={store.businessId} entityName={store.companyName} />
+      <div style={{ height: 1, background: "rgba(26,16,53,0.08)", margin: "32px 0 24px" }} />
+
+      {/* Compact icon menu — Registry Match, Email, Domain, Document Upload,
+          Legal Entity, Publish & Privacy (QA #28/#31). Secondary to blocks. */}
+      <VerifyMenu businessId={store.businessId} token={token} mobile={m} entityKind={store.entityKind} />
     </div>
   );
 }
@@ -755,20 +808,71 @@ function StatusPill({ text, color }: { text: string; color: string }) {
   );
 }
 
-function VerificationSection({
+type VerifyMenuKey = "registry" | "email" | "domain" | "document" | "legal" | "publish";
+
+// A single icon button in the compact menu row. `done` draws a small status
+// dot (green when live/verified, amber for "not found", nothing otherwise)
+// so the whole verification state is scannable without opening anything.
+function MenuIconButton({
+  icon, label, active, dotColor, onClick, disabled,
+}: {
+  icon: React.ReactNode; label: string; active: boolean;
+  dotColor: string | null; onClick: () => void; disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+        width: 62, padding: "10px 4px 8px",
+        border: active ? `1.5px solid ${V_INDIGO}` : "1px solid rgba(255,255,255,0.7)",
+        borderRadius: 12,
+        background: active ? "rgba(91,69,201,0.08)" : "rgba(255,255,255,0.45)",
+        backdropFilter: "blur(12px) saturate(130%)",
+        WebkitBackdropFilter: "blur(12px) saturate(130%)",
+        boxShadow: "0 6px 16px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+        fontFamily: "inherit",
+      }}
+    >
+      <span style={{ position: "relative", display: "flex" }}>
+        {icon}
+        {dotColor && (
+          <span style={{
+            position: "absolute", top: -2, right: -3, width: 7, height: 7,
+            borderRadius: "50%", background: dotColor, border: "1.5px solid #fff",
+          }} />
+        )}
+      </span>
+      <span style={{ fontSize: 10, color: V_MUTED, fontWeight: 600, whiteSpace: "nowrap" }}>{label}</span>
+    </button>
+  );
+}
+
+// Verifiers + Registry Match + Document Upload + Legal Entity + Publish &
+// Privacy, collapsed into one compact icon-based menu (QA #28/#31) instead of
+// five full-width strips. One item's panel is open at a time (accordion),
+// directly beneath the icon row. Merges the previous VerificationSection and
+// PublishSection so the row spans both — icons stay tiny, the page stays short.
+function VerifyMenu({
   businessId, token, mobile: m, entityKind,
 }: { businessId: string | null; token: string | null; mobile: boolean; entityKind: EntityKind }) {
   // Registry / Document Upload / Legal-entity link are business concepts — a
   // persona account (journalist/actor/creator/other) only gets Email + Domain.
   const isBusinessKind = !isPersonKind(entityKind);
+  const [activeKey, setActiveKey] = useState<VerifyMenuKey | null>(null);
+  const toggle = (k: VerifyMenuKey) => setActiveKey((cur) => (cur === k ? null : k));
 
   // Registry
   const [registryStatus, setRegistryStatus] = useState<string | null>(null);
   const [registryBusy, setRegistryBusy] = useState(false);
   const [registryTimedOut, setRegistryTimedOut] = useState(false);
 
-  // Business Email Control
-  const [emailOpen, setEmailOpen] = useState(false);
+  // Business Email Control — panel visibility now driven by activeKey, not
+  // its own toggle.
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [emailCode, setEmailCode] = useState("");
@@ -777,7 +881,6 @@ function VerificationSection({
   const [emailErr, setEmailErr] = useState<string | null>(null);
 
   // Domain Ownership
-  const [domainOpen, setDomainOpen] = useState(false);
   const [domain, setDomain] = useState("");
   const [domainInstr, setDomainInstr] = useState<DomainVerifyInstructions | null>(null);
   const [domainDone, setDomainDone] = useState(false);
@@ -790,6 +893,13 @@ function VerificationSection({
   const [selectedLegal, setSelectedLegal] = useState("");
   const [legalBusy, setLegalBusy] = useState(false);
   const [legalErr, setLegalErr] = useState<string | null>(null);
+
+  // Publish & Privacy (merged from the former PublishSection)
+  const [isPublished, setIsPublished] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [privacyBusy, setPrivacyBusy] = useState(false);
+  const [publishErr, setPublishErr] = useState<string | null>(null);
 
   // Continues polling a check already in flight (started before this mount,
   // or left running past the previous poll's attempt cap) as well as one just
@@ -832,6 +942,17 @@ function VerificationSection({
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, token, isBusinessKind]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    businessApi.get(businessId).then((biz) => {
+      if (cancelled) return;
+      setIsPublished(!!biz.is_published);
+      setIsPublic(biz.is_public !== false);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [businessId]);
 
   if (!businessId) return null;
 
@@ -897,14 +1018,76 @@ function VerificationSection({
     finally { setLegalBusy(false); }
   };
 
+  const doPublish = async () => {
+    if (!token) return;
+    setPublishBusy(true); setPublishErr(null);
+    try { await businessApi.publish(businessId, token); setIsPublished(true); }
+    catch (e) { setPublishErr(errMsg(e)); }
+    finally { setPublishBusy(false); }
+  };
+  const togglePrivacy = async () => {
+    if (!token) return;
+    const next = !isPublic;
+    setPrivacyBusy(true); setPublishErr(null);
+    try { await businessApi.setPrivacy(businessId, next, token); setIsPublic(next); }
+    catch (e) { setPublishErr(errMsg(e)); }
+    finally { setPrivacyBusy(false); }
+  };
+
   const registryVerified = registryStatus === "verified";
+
+  const menuItems: Array<{
+    key: VerifyMenuKey; icon: React.ReactNode; label: string; dotColor: string | null; disabled?: boolean;
+  } | false> = [
+    isBusinessKind && {
+      key: "registry", icon: <BuildingIcon size={18} color={registryVerified ? V_INDIGO : V_MUTED} />,
+      label: "Registry", dotColor: registryVerified ? V_INDIGO : registryStatus === "not_found" ? V_SUN : null,
+    },
+    {
+      key: "email", icon: <MailIcon size={18} color={emailDone ? V_INDIGO : V_MUTED} />,
+      label: "Email", dotColor: emailDone ? V_INDIGO : null,
+    },
+    {
+      key: "domain", icon: <GlobeIcon size={18} color={domainDone ? V_GREEN : V_MUTED} />,
+      label: "Domain", dotColor: domainDone ? V_GREEN : null,
+    },
+    isBusinessKind && {
+      key: "document", icon: <DocumentIcon size={18} color={V_MUTED} />,
+      label: "Document", dotColor: null, disabled: false,
+    },
+    isBusinessKind && {
+      key: "legal", icon: <LinkIcon size={18} color={linked ? V_INDIGO : V_MUTED} />,
+      label: "Legal", dotColor: linked ? V_INDIGO : null,
+    },
+    {
+      key: "publish", icon: <ShieldIcon size={18} color={isPublished ? (isPublic ? V_GREEN : V_MUTED) : V_MUTED} />,
+      label: "Publish", dotColor: isPublished ? (isPublic ? V_GREEN : V_MUTED) : null,
+    },
+  ];
 
   return (
     <div style={{ marginBottom: 32 }}>
-      <div style={{ ...vSectionLabel, marginBottom: 14 }}>Verification</div>
+      <div style={{ ...vSectionLabel, marginBottom: 14 }}>Verification &amp; publishing</div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: activeKey ? 14 : 0 }}>
+        {menuItems.filter(Boolean).map((item) => {
+          const it = item as Exclude<typeof menuItems[number], false>;
+          return (
+            <MenuIconButton
+              key={it.key}
+              icon={it.icon}
+              label={it.label}
+              active={activeKey === it.key}
+              dotColor={it.dotColor}
+              disabled={it.disabled}
+              onClick={() => toggle(it.key)}
+            />
+          );
+        })}
+      </div>
 
       {/* Official Registry Match — business/organization only */}
-      {isBusinessKind && (
+      {activeKey === "registry" && isBusinessKind && (
         <MethodCard
           title="Official Registry Match"
           desc="Match your legal name against Handelsregister, GLEIF or EU VAT."
@@ -933,102 +1116,90 @@ function VerificationSection({
       )}
 
       {/* Email Control */}
-      <MethodCard
-        title={isBusinessKind ? "Business Email Control" : "Email Control"}
-        desc={isBusinessKind ? "Confirm a magic code sent to an address on your own domain." : "Confirm a magic code sent to an email address you control."}
-        accent={emailDone ? V_INDIGO : "#B8B2C8"}
-        right={
-          emailDone ? (
-            <StatusPill text="verified" color={V_INDIGO} />
-          ) : (
-            <button onClick={() => setEmailOpen((o) => !o)} style={vBtn("ghost")}>
-              {emailOpen ? "Cancel" : "Verify"}
-            </button>
-          )
-        }
-      >
-        {emailOpen && !emailDone && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
-            <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@yourbrand.com" disabled={emailSent} style={vInput}
-              />
-              {!emailSent && (
-                <button onClick={sendEmailCode} disabled={emailBusy || !email.trim()} style={vBtn("primary", emailBusy || !email.trim())}>
-                  {emailBusy ? <SpinnerIcon size={12} /> : null} Send code
-                </button>
-              )}
-            </div>
-            {emailSent && (
+      {activeKey === "email" && (
+        <MethodCard
+          title={isBusinessKind ? "Business Email Control" : "Email Control"}
+          desc={isBusinessKind ? "Confirm a magic code sent to an address on your own domain." : "Confirm a magic code sent to an email address you control."}
+          accent={emailDone ? V_INDIGO : "#B8B2C8"}
+          right={emailDone ? <StatusPill text="verified" color={V_INDIGO} /> : undefined}
+        >
+          {!emailDone && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
               <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
                 <input
-                  value={emailCode} onChange={(e) => setEmailCode(e.target.value)}
-                  placeholder="6-digit code" inputMode="numeric" style={vInput}
+                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@yourbrand.com" disabled={emailSent} style={vInput}
                 />
-                <button onClick={confirmEmailCode} disabled={emailBusy || !emailCode.trim()} style={vBtn("primary", emailBusy || !emailCode.trim())}>
-                  {emailBusy ? <SpinnerIcon size={12} /> : null} Confirm
-                </button>
+                {!emailSent && (
+                  <button onClick={sendEmailCode} disabled={emailBusy || !email.trim()} style={vBtn("primary", emailBusy || !email.trim())}>
+                    {emailBusy ? <SpinnerIcon size={12} /> : null} Send code
+                  </button>
+                )}
               </div>
-            )}
-            {emailSent && !emailErr && (
-              <div style={{ fontSize: 12, color: V_MUTED }}>Code sent to {email}. Free-mailbox domains (gmail, etc.) are rejected.</div>
-            )}
-            {emailErr && <div style={{ fontSize: 12.5, color: V_SUN }}>{emailErr}</div>}
-          </div>
-        )}
-      </MethodCard>
+              {emailSent && (
+                <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
+                  <input
+                    value={emailCode} onChange={(e) => setEmailCode(e.target.value)}
+                    placeholder="6-digit code" inputMode="numeric" style={vInput}
+                  />
+                  <button onClick={confirmEmailCode} disabled={emailBusy || !emailCode.trim()} style={vBtn("primary", emailBusy || !emailCode.trim())}>
+                    {emailBusy ? <SpinnerIcon size={12} /> : null} Confirm
+                  </button>
+                </div>
+              )}
+              {emailSent && !emailErr && (
+                <div style={{ fontSize: 12, color: V_MUTED }}>Code sent to {email}. Free-mailbox domains (gmail, etc.) are rejected.</div>
+              )}
+              {emailErr && <div style={{ fontSize: 12.5, color: V_SUN }}>{emailErr}</div>}
+            </div>
+          )}
+        </MethodCard>
+      )}
 
       {/* Domain Ownership */}
-      <MethodCard
-        title="Domain Ownership"
-        desc="Prove control of your domain via a DNS TXT record or a well-known file."
-        accent={domainDone ? V_GREEN : "#B8B2C8"}
-        right={
-          domainDone ? (
-            <StatusPill text="verified" color={V_GREEN} />
-          ) : (
-            <button onClick={() => setDomainOpen((o) => !o)} style={vBtn("ghost")}>
-              {domainOpen ? "Cancel" : "Verify"}
-            </button>
-          )
-        }
-      >
-        {domainOpen && !domainDone && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 520 }}>
-            {!domainInstr ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
-                <input
-                  value={domain} onChange={(e) => setDomain(e.target.value)}
-                  placeholder="yourbrand.com" style={vInput}
-                />
-                <button onClick={getDomainInstr} disabled={domainBusy || !domain.trim()} style={vBtn("primary", domainBusy || !domain.trim())}>
-                  {domainBusy ? <SpinnerIcon size={12} /> : null} Get instructions
-                </button>
-              </div>
-            ) : (
-              <div>
-                <div style={{ fontSize: 12.5, color: V_SEC, lineHeight: 1.55, marginBottom: 10 }}>
-                  Add <strong>either</strong> proof for <strong>{domainInstr.domain}</strong>, then check:
+      {activeKey === "domain" && (
+        <MethodCard
+          title="Domain Ownership"
+          desc="Prove control of your domain via a DNS TXT record or a well-known file."
+          accent={domainDone ? V_GREEN : "#B8B2C8"}
+          right={domainDone ? <StatusPill text="verified" color={V_GREEN} /> : undefined}
+        >
+          {!domainDone && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 520 }}>
+              {!domainInstr ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap" }}>
+                  <input
+                    value={domain} onChange={(e) => setDomain(e.target.value)}
+                    placeholder="yourbrand.com" style={vInput}
+                  />
+                  <button onClick={getDomainInstr} disabled={domainBusy || !domain.trim()} style={vBtn("primary", domainBusy || !domain.trim())}>
+                    {domainBusy ? <SpinnerIcon size={12} /> : null} Get instructions
+                  </button>
                 </div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: V_SEC, margin: "0 0 6px", letterSpacing: "0.4px" }}>DNS TXT record</div>
-                <CopyRow label="Host" value={domainInstr.dns_txt.host} />
-                <CopyRow label="Value" value={domainInstr.dns_txt.value} />
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: V_SEC, margin: "10px 0 6px", letterSpacing: "0.4px" }}>…or well-known file</div>
-                <CopyRow label={domainInstr.file.url} value={domainInstr.file.content} />
-                <button onClick={checkDomain} disabled={domainBusy} style={{ ...vBtn("primary", domainBusy), marginTop: 4 }}>
-                  {domainBusy ? <SpinnerIcon size={12} /> : null} Check now
-                </button>
-              </div>
-            )}
-            {domainErr && <div style={{ fontSize: 12.5, color: V_SUN, lineHeight: 1.5 }}>{domainErr}</div>}
-          </div>
-        )}
-      </MethodCard>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 12.5, color: V_SEC, lineHeight: 1.55, marginBottom: 10 }}>
+                    Add <strong>either</strong> proof for <strong>{domainInstr.domain}</strong>, then check:
+                  </div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: V_SEC, margin: "0 0 6px", letterSpacing: "0.4px" }}>DNS TXT record</div>
+                  <CopyRow label="Host" value={domainInstr.dns_txt.host} />
+                  <CopyRow label="Value" value={domainInstr.dns_txt.value} />
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: V_SEC, margin: "10px 0 6px", letterSpacing: "0.4px" }}>…or well-known file</div>
+                  <CopyRow label={domainInstr.file.url} value={domainInstr.file.content} />
+                  <button onClick={checkDomain} disabled={domainBusy} style={{ ...vBtn("primary", domainBusy), marginTop: 4 }}>
+                    {domainBusy ? <SpinnerIcon size={12} /> : null} Check now
+                  </button>
+                </div>
+              )}
+              {domainErr && <div style={{ fontSize: 12.5, color: V_SUN, lineHeight: 1.5 }}>{domainErr}</div>}
+            </div>
+          )}
+        </MethodCard>
+      )}
 
       {/* Document Upload — visible but DISABLED, no network calls (Coming soon).
           Business/organization only (registration certificate, licence, tax ID). */}
-      {isBusinessKind && (
+      {activeKey === "document" && isBusinessKind && (
         <MethodCard
           title="Document Upload"
           desc="Registration certificate, licence or tax ID — reviewed by our team."
@@ -1040,124 +1211,77 @@ function VerificationSection({
 
       {/* Brand → verified legal entity link — business/organization only; the
           brand→parent-company concept doesn't apply to a person account. */}
-      {isBusinessKind && (
-        <>
-          <div style={{ ...vSectionLabel, margin: "22px 0 12px" }}>Legal entity</div>
-          <MethodCard
-            title="Link to a verified legal entity"
-            desc="Inherit trust from a registry-verified entity you own (e.g. a brand → its parent company). Publicly disclosed on your page."
-            accent={linked ? V_INDIGO : "#B8B2C8"}
-            right={linked ? <StatusPill text="linked" color={V_INDIGO} /> : undefined}
-          >
-            {linked ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 13.5, color: V_TEXT }}>
-                  Linked to <strong>{linked.name}</strong>{" "}
-                  <span style={{ fontSize: 12, color: V_MUTED }}>· registry-verified legal entity</span>
-                </div>
-                <button onClick={unlinkLegal} disabled={legalBusy} style={{ ...vBtn("ghost", legalBusy), marginLeft: "auto" }}>
-                  {legalBusy ? <SpinnerIcon size={12} /> : null} Unlink
-                </button>
+      {activeKey === "legal" && isBusinessKind && (
+        <MethodCard
+          title="Link to a verified legal entity"
+          desc="Inherit trust from a registry-verified entity you own (e.g. a brand → its parent company). Publicly disclosed on your page."
+          accent={linked ? V_INDIGO : "#B8B2C8"}
+          right={linked ? <StatusPill text="linked" color={V_INDIGO} /> : undefined}
+        >
+          {linked ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 13.5, color: V_TEXT }}>
+                Linked to <strong>{linked.name}</strong>{" "}
+                <span style={{ fontSize: 12, color: V_MUTED }}>· registry-verified legal entity</span>
               </div>
-            ) : candidates.length > 0 ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap", alignItems: "center" }}>
-                <select
-                  value={selectedLegal} onChange={(e) => setSelectedLegal(e.target.value)}
-                  style={{ ...vInput, cursor: "pointer" }}
-                >
-                  <option value="">Choose a verified entity you own…</option>
-                  {candidates.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                <button onClick={linkLegal} disabled={legalBusy || !selectedLegal} style={vBtn("primary", legalBusy || !selectedLegal)}>
-                  {legalBusy ? <SpinnerIcon size={12} /> : null} Link
-                </button>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12.5, color: V_MUTED, lineHeight: 1.5 }}>
-                No registry-verified entities to link yet. Registry-verify another entity you own first, then link it here.
-              </div>
-            )}
-            {legalErr && <div style={{ fontSize: 12.5, color: V_SUN, marginTop: 8 }}>{legalErr}</div>}
-          </MethodCard>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ===== Publish & Privacy =====
-// Wires businessApi.publish / businessApi.setPrivacy — previously defined in
-// lib/api.ts but never called from any UI (audit #12).
-function PublishSection({
-  businessId, token, mobile: m,
-}: { businessId: string | null; token: string | null; mobile: boolean }) {
-  const [isPublished, setIsPublished] = useState(false);
-  const [isPublic, setIsPublic] = useState(true);
-  const [publishBusy, setPublishBusy] = useState(false);
-  const [privacyBusy, setPrivacyBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!businessId) return;
-    let cancelled = false;
-    businessApi.get(businessId).then((biz) => {
-      if (cancelled) return;
-      setIsPublished(!!biz.is_published);
-      setIsPublic(biz.is_public !== false);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [businessId]);
-
-  if (!businessId) return null;
-
-  const doPublish = async () => {
-    if (!token) return;
-    setPublishBusy(true); setErr(null);
-    try { await businessApi.publish(businessId, token); setIsPublished(true); }
-    catch (e) { setErr(errMsg(e)); }
-    finally { setPublishBusy(false); }
-  };
-
-  const togglePrivacy = async () => {
-    if (!token) return;
-    const next = !isPublic;
-    setPrivacyBusy(true); setErr(null);
-    try { await businessApi.setPrivacy(businessId, next, token); setIsPublic(next); }
-    catch (e) { setErr(errMsg(e)); }
-    finally { setPrivacyBusy(false); }
-  };
-
-  return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ ...vSectionLabel, marginBottom: 14 }}>Publish &amp; Privacy</div>
-      <MethodCard
-        title={isPublished ? "Your page is live" : "Publish your page"}
-        desc={
-          isPublished
-            ? isPublic
-              ? "Visible to visitors and discoverable by agents."
-              : "Live, but hidden — only reachable via direct link."
-            : "Make your page reachable at its public URL. You can unpublish or change visibility any time."
-        }
-        accent={isPublished ? (isPublic ? V_GREEN : V_MUTED) : "#B8B2C8"}
-        right={
-          isPublished ? (
-            <>
-              <StatusPill text={isPublic ? "public" : "private"} color={isPublic ? V_GREEN : V_MUTED} />
-              <button onClick={togglePrivacy} disabled={privacyBusy || !token} style={vBtn("ghost", privacyBusy || !token)}>
-                {privacyBusy ? <SpinnerIcon size={12} /> : null} {isPublic ? "Make private" : "Make public"}
+              <button onClick={unlinkLegal} disabled={legalBusy} style={{ ...vBtn("ghost", legalBusy), marginLeft: "auto" }}>
+                {legalBusy ? <SpinnerIcon size={12} /> : null} Unlink
               </button>
-            </>
+            </div>
+          ) : candidates.length > 0 ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: m ? "wrap" : "nowrap", alignItems: "center" }}>
+              <select
+                value={selectedLegal} onChange={(e) => setSelectedLegal(e.target.value)}
+                style={{ ...vInput, cursor: "pointer" }}
+              >
+                <option value="">Choose a verified entity you own…</option>
+                {candidates.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button onClick={linkLegal} disabled={legalBusy || !selectedLegal} style={vBtn("primary", legalBusy || !selectedLegal)}>
+                {legalBusy ? <SpinnerIcon size={12} /> : null} Link
+              </button>
+            </div>
           ) : (
-            <button onClick={doPublish} disabled={publishBusy || !token} style={vBtn("primary", publishBusy || !token)}>
-              {publishBusy ? <SpinnerIcon size={12} /> : null} Publish
-            </button>
-          )
-        }
-      />
-      {err && <div style={{ fontSize: 12.5, color: V_SUN, marginTop: -4, marginBottom: 8 }}>{err}</div>}
+            <div style={{ fontSize: 12.5, color: V_MUTED, lineHeight: 1.5 }}>
+              No registry-verified entities to link yet. Registry-verify another entity you own first, then link it here.
+            </div>
+          )}
+          {legalErr && <div style={{ fontSize: 12.5, color: V_SUN, marginTop: 8 }}>{legalErr}</div>}
+        </MethodCard>
+      )}
+
+      {/* Publish & Privacy */}
+      {activeKey === "publish" && (
+        <MethodCard
+          title={isPublished ? "Your page is live" : "Publish your page"}
+          desc={
+            isPublished
+              ? isPublic
+                ? "Visible to visitors and discoverable by agents."
+                : "Live, but hidden — only reachable via direct link."
+              : "Make your page reachable at its public URL. You can unpublish or change visibility any time."
+          }
+          accent={isPublished ? (isPublic ? V_GREEN : V_MUTED) : "#B8B2C8"}
+          right={
+            isPublished ? (
+              <>
+                <StatusPill text={isPublic ? "public" : "private"} color={isPublic ? V_GREEN : V_MUTED} />
+                <button onClick={togglePrivacy} disabled={privacyBusy || !token} style={vBtn("ghost", privacyBusy || !token)}>
+                  {privacyBusy ? <SpinnerIcon size={12} /> : null} {isPublic ? "Make private" : "Make public"}
+                </button>
+              </>
+            ) : (
+              <button onClick={doPublish} disabled={publishBusy || !token} style={vBtn("primary", publishBusy || !token)}>
+                {publishBusy ? <SpinnerIcon size={12} /> : null} Publish
+              </button>
+            )
+          }
+        >
+          {publishErr && <div style={{ fontSize: 12.5, color: V_SUN }}>{publishErr}</div>}
+        </MethodCard>
+      )}
     </div>
   );
 }
@@ -1447,7 +1571,12 @@ function MediaDisplay({
 }
 
 // ===== Pi CAM Connect =====
-function PiCamSection({ businessId, entityName }: { businessId: string | null; entityName: string }) {
+// Deliberately a small button next to the blocks header, not a section
+// inside the general verification menu (QA #30) — the capture→block
+// relationship should read at a glance. 14.5 will add the same QR/Pairing-Code
+// sync as a reachable entry point from here for users who skipped it at
+// onboarding; this button is that entry point, wired to the existing flow.
+function PiCamButton({ businessId, entityName }: { businessId: string | null; entityName: string }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
   const [qrData, setQrData] = useState<string | null>(null);
@@ -1482,48 +1611,24 @@ function PiCamSection({ businessId, entityName }: { businessId: string | null; e
 
   return (
     <>
-      <div style={{ marginTop: 40, paddingTop: 28, borderTop: "1px solid rgba(26,16,53,0.08)" }}>
-        <div style={{
-          fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-          fontSize: 10.5, letterSpacing: "1.4px", textTransform: "uppercase",
-          color: "#9991AC", marginBottom: 14,
-        }}>
-          Pi CAM
-        </div>
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          flexWrap: "wrap", gap: 12,
-        }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1035", marginBottom: 4 }}>
-              Connect Pi CAM mobile app
-            </div>
-            <div style={{ fontSize: 13, color: "#9991AC", lineHeight: 1.5 }}>
-              Scan QR in the Pi CAM app to link your camera. Photos will be C2PA-signed and uploaded automatically.
-            </div>
-            {authToken && (
-              <div style={{ fontSize: 11, color: "#27AE60", marginTop: 6, fontWeight: 500 }}>
-                ✓ Signed in
-              </div>
-            )}
-          </div>
-          <button
-            onClick={handleConnect}
-            disabled={loading}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              padding: "10px 20px",
-              border: "1px solid rgba(91,69,201,0.3)", borderRadius: 10,
-              background: "rgba(91,69,201,0.06)", color: "#5B45C9", fontSize: 13.5, fontWeight: 600,
-              cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit",
-              opacity: loading ? 0.6 : 1, whiteSpace: "nowrap",
-            }}
-          >
-            {loading ? <SpinnerIcon size={14} /> : <CameraIcon size={14} color="#5B45C9" />}
-            {loading ? "Generating…" : "Connect Pi CAM"}
-          </button>
-        </div>
-        {error && <div style={{ marginTop: 10, fontSize: 13, color: "#F59A2E" }}>{error}</div>}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+        <button
+          onClick={handleConnect}
+          disabled={loading}
+          title="Scan a QR in the Pi CAM app to link your camera — captures are C2PA-signed and uploaded straight into a block."
+          style={{
+            display: "flex", alignItems: "center", gap: 7,
+            padding: "7px 14px",
+            border: "1px solid rgba(91,69,201,0.3)", borderRadius: 9,
+            background: "rgba(91,69,201,0.06)", color: "#5B45C9", fontSize: 12.5, fontWeight: 600,
+            cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit",
+            opacity: loading ? 0.6 : 1, whiteSpace: "nowrap",
+          }}
+        >
+          {loading ? <SpinnerIcon size={13} /> : <CameraIcon size={13} color="#5B45C9" />}
+          {loading ? "Generating…" : "Connect Camera"}
+        </button>
+        {error && <div style={{ fontSize: 11.5, color: "#F59A2E", maxWidth: 220, textAlign: "right" }}>{error}</div>}
       </div>
 
       {showLogin && (

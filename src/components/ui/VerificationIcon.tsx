@@ -166,3 +166,74 @@ export function CheckCircleIcon({ size = 20, color = "#6B3FA0" }: VerificationIc
     </svg>
   );
 }
+
+export function BuildingIcon({ size = 20, color = "#6B3FA0" }: VerificationIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5" />
+      <path d="M9 11h.01M12 11h.01M15 11h.01" />
+    </svg>
+  );
+}
+
+export function GlobeIcon({ size = 20, color = "#6B3FA0" }: VerificationIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a13.7 13.7 0 0 1 0 18M12 3a13.7 13.7 0 0 0 0 18" />
+    </svg>
+  );
+}
+
+export function LinkIcon({ size = 20, color = "#6B3FA0" }: VerificationIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 13a5 5 0 0 0 7.07 0l2-2a5 5 0 0 0-7.07-7.07l-1 1" />
+      <path d="M14 11a5 5 0 0 0-7.07 0l-2 2a5 5 0 0 0 7.07 7.07l1-1" />
+    </svg>
+  );
+}
+
+export function ShieldIcon({ size = 20, color = "#6B3FA0" }: VerificationIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 2.5l7.5 3.5v5.5c0 5-3.2 8.3-7.5 9.9-4.3-1.6-7.5-4.9-7.5-9.9V6z" />
+    </svg>
+  );
+}
