@@ -452,6 +452,13 @@ export const blockApi = {
       token
     ),
 
+  // Public per-block permalink (also used after upload to read back the real
+  // MediaOut the server just wrote — mediaApi.upload's own response doesn't
+  // carry storage_url/original_hash, see docs/known-issues.md "1.20 backend
+  // scoping session").
+  get: (blockId: string, token?: string): Promise<Block> =>
+    request(`/blocks/${blockId}`, {}, token),
+
   update: (
     blockId: string,
     data: { title?: string; description?: string; order?: number },
