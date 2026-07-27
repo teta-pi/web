@@ -80,6 +80,7 @@ jobs:
             "/settings/page": "app/settings/page.js",
             "/login/page": "app/login/page.js",
             "/e/[slug]/page": "app/e/[slug]/page.js",
+            "/e/[slug]/blocks/[blockId]/page": "app/e/[slug]/blocks/[blockId]/page.js",
             "/search/page": "app/search/page.js",
             "/.well-known/agent.json/route": "app/.well-known/agent.json/route.js",
             "/icon.svg/route": "app/icon.svg/route.js",
