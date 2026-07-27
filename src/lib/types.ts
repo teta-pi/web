@@ -22,6 +22,7 @@ export interface MediaItem {
   id: string;
   type: "video" | "photo" | "file";
   storage_url: string;
+  original_hash: string | null;
   c2pa_verified: boolean;
   c2pa_signer: string | null;
   bitcoin_confirmed: boolean;

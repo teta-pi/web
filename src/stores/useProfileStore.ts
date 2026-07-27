@@ -9,6 +9,13 @@ export type MediaPhase = "empty" | "signing" | "timestamping" | "done";
 export interface BlockMedia {
   source: MediaSource;
   phase: MediaPhase;
+  // Real server-side fields, populated from mediaApi.upload's follow-up
+  // blockApi.get() call or from mapServerBlock — absent while phase !== "done".
+  id?: string;
+  storage_url?: string;
+  original_hash?: string | null;
+  c2pa_verified?: boolean;
+  bitcoin_confirmed?: boolean;
 }
 
 export interface ProfileBlock {

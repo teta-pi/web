@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi } from "@/lib/api";
+import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi, mediaUrl } from "@/lib/api";
 import type { DomainVerifyInstructions, PublicLegalEntity } from "@/lib/api";
 import type { Block, Business, EntityKind } from "@/lib/types";
 import { isPersonKind, normalizeEntityKind } from "@/lib/types";
@@ -46,7 +46,15 @@ function mapServerBlock(b: Block): ProfileBlock {
     title: b.title ?? "",
     desc: b.description ?? "",
     media: media
-      ? { source: media.c2pa_verified ? "pi_camera" : "file", phase: "done" }
+      ? {
+          source: media.c2pa_verified ? "pi_camera" : "file",
+          phase: "done",
+          id: media.id,
+          storage_url: media.storage_url,
+          original_hash: media.original_hash,
+          c2pa_verified: media.c2pa_verified,
+          bitcoin_confirmed: media.bitcoin_confirmed,
+        }
       : null,
   };
 }
@@ -1317,16 +1325,33 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
         if (token && store.businessId) {
           try {
             const { mediaApi } = await import("@/lib/api");
-            await mediaApi.upload(block.id, file, file.type.split("/")[0] || "image", token);
+            const result = await mediaApi.upload(block.id, file, file.type.split("/")[0] || "image", token);
+            // mediaApi.upload's own response doesn't carry storage_url/original_hash
+            // (dropped by the API's response_model) — re-fetch the block via the
+            // permalink endpoint to read back the real MediaOut the server wrote.
+            const updatedBlock = await blockApi.get(block.id, token);
+            const uploaded =
+              updatedBlock.media.find((m) => m.id === result.media_id) ??
+              updatedBlock.media[updatedBlock.media.length - 1];
+            store.setBlockMedia(block.id, {
+              source,
+              phase: "done",
+              id: uploaded?.id,
+              storage_url: uploaded?.storage_url,
+              original_hash: uploaded?.original_hash,
+              c2pa_verified: uploaded?.c2pa_verified,
+              bitcoin_confirmed: uploaded?.bitcoin_confirmed,
+            });
           } catch (e) {
             setUploadError(e instanceof Error ? e.message : "Upload failed");
             store.setBlockMedia(block.id, null);
-            return;
           }
+          return;
         }
       }
 
-      // Both Pi CAM (handled server-side) and file finish as "done"
+      // Pi CAM pairing isn't wired yet (tracked separately, 14.x) — UI-only
+      // simulation, no real fields to attach.
       setTimeout(
         () => store.setBlockMedia(block.id, { source, phase: "done" }),
         source === "pi_camera" ? 850 : 400
@@ -1468,28 +1493,73 @@ function MediaDisplay({
   const media = block.media!;
   const isCamera = media.source === "pi_camera";
   const isDone = media.phase === "done";
+  const [imgError, setImgError] = useState(false);
 
   const accentColor = isDone ? (isCamera ? "#5B45C9" : "#F59A2E") : "#9991AC";
+  const resolvedUrl = media.storage_url ? mediaUrl(media.storage_url) : null;
+  const statusLabel = media.bitcoin_confirmed
+    ? "✓ Timestamped on Bitcoin"
+    : media.c2pa_verified
+    ? "✓ Authentic — C2PA signed"
+    : resolvedUrl
+    ? "Uploaded — pending Bitcoin timestamp"
+    : "Uploaded";
   const hash = isDone
-    ? isCamera
-      ? "#c2pa:verified · btc:ts:confirmed"
-      : "#btc:ts:confirmed"
+    ? [
+        media.original_hash ? `#sha256:${media.original_hash.slice(0, 16)}…` : null,
+        media.c2pa_verified ? "c2pa:verified" : null,
+        media.bitcoin_confirmed ? "btc:ts:confirmed" : resolvedUrl ? "btc:ts:pending" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
     : "";
 
   return (
     <div>
-      {/* Media placeholder (striped) */}
+      {/* Real media preview, falling back to a striped placeholder */}
       <div
         style={{
           height: 140,
           borderRadius: 9,
           position: "relative",
           overflow: "hidden",
-          background: "repeating-linear-gradient(135deg, rgba(91,69,201,0.04) 0px, rgba(91,69,201,0.04) 8px, transparent 8px, transparent 16px)",
+          background: resolvedUrl && !imgError
+            ? "#F3F1FA"
+            : "repeating-linear-gradient(135deg, rgba(91,69,201,0.04) 0px, rgba(91,69,201,0.04) 8px, transparent 8px, transparent 16px)",
           border: "1px solid rgba(26,16,53,0.08)",
           marginBottom: 10,
         }}
       >
+        {resolvedUrl && !imgError && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolvedUrl}
+            alt=""
+            onError={() => setImgError(true)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        )}
+        {resolvedUrl && imgError && (
+          <a
+            href={resolvedUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#5B45C9",
+              textDecoration: "none",
+            }}
+          >
+            <DocumentIcon size={18} /> View file
+          </a>
+        )}
         {isCamera && (
           <div
             style={{
@@ -1545,7 +1615,7 @@ function MediaDisplay({
                 }}
               >
                 <VerificationIcon size={15} color={accentColor} />
-                {isCamera ? "✓ Authentic — signed by PI Camera" : "✓ Timestamped on Bitcoin"}
+                {statusLabel}
               </div>
               <div
                 style={{
