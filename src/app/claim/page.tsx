@@ -149,7 +149,6 @@ export default function ClaimPage() {
   const [emailError, setEmailError] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [readyToPay, setReadyToPay] = useState(false);
   const claimSubmittedRef = useRef(false);
 
   const isPerson = isPersonKind(store.entityKind);
@@ -170,7 +169,7 @@ export default function ClaimPage() {
       actor: "other", creator: "creator", other: "other",
     };
     claimApi
-      .create(store.accountEmail, kindMap[store.entityKind ?? "business"] ?? "other", readyToPay, {
+      .create(store.accountEmail, kindMap[store.entityKind ?? "business"] ?? "other", {
         referrer: typeof document !== "undefined" ? document.referrer || null : null,
       })
       .catch(() => { claimSubmittedRef.current = false; });
@@ -497,15 +496,10 @@ export default function ClaimPage() {
                       style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontSize: 15, color: TEXT, fontFamily: "inherit" }}
                     />
                   </div>
-                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: TEXT_SEC, lineHeight: 1.5, cursor: "pointer", marginBottom: 14 }}>
-                    <input
-                      type="checkbox"
-                      checked={readyToPay}
-                      onChange={(e) => setReadyToPay(e.target.checked)}
-                      style={{ marginTop: 2, width: 15, height: 15, accentColor: INDIGO }}
-                    />
-                    <span>I&apos;m ready to pay <strong>$25</strong> when billing launches — lock my founding price.</span>
-                  </label>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: TEXT_SEC, lineHeight: 1.5, marginBottom: 14 }}>
+                    <CheckCircleIcon size={14} />
+                    <span>Join early access — be first on the registry.</span>
+                  </div>
                   {emailError && <div style={{ color: SUN, fontSize: 13, marginBottom: 10 }}>{emailError}</div>}
                   <BtnPrimary
                     disabled={!emailInput.includes("@") || emailLoading}

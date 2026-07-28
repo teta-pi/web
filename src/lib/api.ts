@@ -136,7 +136,6 @@ export const claimApi = {
   create: async (
     email: string,
     entityType: "business" | "journalist" | "creator" | "developer" | "other",
-    readyToPay: boolean,
     source?: Record<string, string | null>
   ): Promise<{ position: number }> => {
     const res = await fetch(`${API_BASE}/api/v1/claim`, {
@@ -145,7 +144,6 @@ export const claimApi = {
       body: JSON.stringify({
         email,
         entity_type: entityType,
-        ready_to_pay: readyToPay,
         source: source ?? null,
       }),
     });
