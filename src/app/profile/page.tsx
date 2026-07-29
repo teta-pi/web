@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import QRCode from "react-qr-code";
 import AppHeader, { APP_HEADER_H } from "@/components/AppHeader";
-import { BadgePill } from "@/components/ui/BadgePill";
-import { IsoChip } from "@/components/ui/IsoChip";
 import {
   VerificationIcon,
   SpinnerIcon,
@@ -20,7 +18,7 @@ import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/u
 import { useAuthStore } from "@/stores/useAuthStore";
 import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi, mediaUrl } from "@/lib/api";
 import type { DomainVerifyInstructions, PublicLegalEntity } from "@/lib/api";
-import type { Block, Business, EntityKind } from "@/lib/types";
+import type { Block, Business, EntityKind, VerificationLevel } from "@/lib/types";
 import { isPersonKind, normalizeEntityKind } from "@/lib/types";
 
 // Public entity pages live on the app subdomain. Shared links are always the
@@ -54,6 +52,7 @@ function mapServerBlock(b: Block): ProfileBlock {
           original_hash: media.original_hash,
           c2pa_verified: media.c2pa_verified,
           bitcoin_confirmed: media.bitcoin_confirmed,
+          bitcoin_block: media.bitcoin_block,
         }
       : null,
   };
@@ -107,6 +106,347 @@ function useViewport() {
   return vw;
 }
 
+// ===== "Grid of Record" design tokens (3.15, docs/design/profile-grid-of-record) =====
+// Exact hex values from the owner's high-fidelity handoff — kept distinct from
+// the V_* constants below (VerifyMenu's older glass palette) since the two
+// visual languages coexist on this page until the redesign finishes (3.15b-f).
+const GR_INK = "#1A1035";
+const GR_BODY = "#4A3F6B";
+const GR_MUTED = "#9088B0";
+const GR_PRIMARY = "#6B3FA0";
+const GR_PRIMARY_HOVER = "#5A3488";
+const GR_TINT = "#F4F0FB";
+const GR_LILAC = "#C9B8E8";
+const GR_ORANGE = "#E8640C";
+const GR_BORDER = "#E2DCF0";
+const GR_RAISED = "#FBFAFD";
+const GR_MONO_FONT = "ui-monospace,'SF Mono',Menlo,monospace";
+const GR_STRIPE = "repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px)";
+
+// none < registry/email/domain < partial < full < live — used only to derive
+// the facts strip's compact "L{n}" trust stat from the real backend enum.
+const TRUST_ORDER: VerificationLevel[] = ["none", "registry", "email", "domain", "partial", "full", "live"];
+function trustOrdinal(level: VerificationLevel | null): number {
+  if (!level) return 0;
+  const i = TRUST_ORDER.indexOf(level);
+  return i < 0 ? 0 : i;
+}
+
+function yearOf(dateLike: string | null | undefined): string {
+  if (!dateLike) return "—";
+  const m = dateLike.match(/\d{4}/);
+  return m ? m[0] : "—";
+}
+
+// Matches the spec's "12 JUN 2026 · 09:41Z" format exactly.
+function formatRecheckTs(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} · ${hh}:${mm}Z`;
+}
+
+// ===== Region 2: Attestation bar =====
+// Full-width bar above identity — three seals (registry/c2pa/btc) derived
+// from the entity's real registry/block data, never hardcoded, plus a status
+// cell with the pulsing re-check dot. Region 2 is entirely new (no 3.13
+// equivalent); it supersedes the inline "✓ Verified in registry" status row
+// EditView used to render next to the name (see EditView below).
+type SealKind = "registry" | "c2pa" | "btc";
+
+function SealGlyph({ kind, verified, size = 14 }: { kind: SealKind; verified: boolean; size?: number }) {
+  const line = verified ? (kind === "btc" ? GR_ORANGE : GR_PRIMARY) : GR_MUTED;
+  const fill = kind === "c2pa" ? "transparent" : verified ? line : "transparent";
+  const radius = kind === "c2pa" ? "50%" : "1px";
+  const rot = kind === "btc" ? "45deg" : "0deg";
+  return (
+    <span
+      style={{
+        width: size, height: size, flexShrink: 0,
+        border: `1.5px solid ${line}`, background: fill,
+        borderRadius: radius, transform: `rotate(${rot})`,
+      }}
+    />
+  );
+}
+
+interface AttestationCell {
+  key: string;
+  kind: SealKind;
+  token: string;
+  detail: string;
+  state: string;
+  verified: boolean;
+}
+
+function AttestationCellView({ cell, mobile: m }: { cell: AttestationCell; mobile: boolean }) {
+  const [hover, setHover] = useState(false);
+  const lineColor = cell.verified ? (cell.kind === "btc" ? GR_ORANGE : GR_PRIMARY) : GR_MUTED;
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        // Full mobile layout (seals stacked as full-width rows) is 3.15f's job —
+        // this basis just keeps cells from clipping on narrow viewports meanwhile.
+        flex: m ? "1 1 50%" : 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12,
+        padding: "15px 20px", borderRight: `1px solid ${GR_BORDER}`,
+        background: hover ? GR_TINT : "transparent",
+      }}
+    >
+      <SealGlyph kind={cell.kind} verified={cell.verified} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11.5, letterSpacing: "0.4px", color: GR_INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {cell.token}
+        </div>
+        <div style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: GR_MUTED, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {cell.detail}
+        </div>
+      </div>
+      <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: lineColor, marginLeft: "auto", letterSpacing: "0.6px", flexShrink: 0, paddingLeft: 8 }}>
+        {cell.verified ? "✓ " : ""}{cell.state}
+      </span>
+    </div>
+  );
+}
+
+function AttestationBar({ mobile: m, updatedAt }: { mobile: boolean; updatedAt: string | null }) {
+  const store = useProfileStore();
+  const isPerson = isPersonKind(store.entityKind);
+  const total = store.blocks.length;
+
+  // "registry" doesn't apply to person-kind entities (journalist/actor/creator/
+  // other never run a registry check) — shown as an explicit n/a cell rather
+  // than silently reusing another attestation's slot.
+  const registryCell: AttestationCell = isPerson
+    ? { key: "registry", kind: "registry", token: "registry:n/a", detail: "not applicable — individual", state: "n/a", verified: false }
+    : store.registryStatus === "verified" && store.registryData
+    ? {
+        key: "registry", kind: "registry", token: "registry:attested",
+        detail: `${store.registryData.iso} · ${store.registryData.authority} ${store.registryData.registryId}`.trim(),
+        state: "attested", verified: true,
+      }
+    : store.registryStatus === "not_found"
+    ? { key: "registry", kind: "registry", token: "registry:not_found", detail: "no match in connected registries", state: "not found", verified: false }
+    : store.registryStatus === "pending"
+    ? { key: "registry", kind: "registry", token: "registry:pending", detail: "check in progress", state: "pending", verified: false }
+    : { key: "registry", kind: "registry", token: "registry:unverified", detail: "not yet checked", state: "unverified", verified: false };
+
+  const signed = store.blocks.filter((b) => b.media?.c2pa_verified).length;
+  const c2paCell: AttestationCell = {
+    key: "c2pa", kind: "c2pa",
+    token: signed > 0 ? "c2pa:verified" : "c2pa:unverified",
+    detail: total > 0 ? `${signed} of ${total} blocks signed` : "no blocks yet",
+    state: signed > 0 ? "verified" : "unverified",
+    verified: signed > 0,
+  };
+
+  const btcBlocks = store.blocks.filter((b) => b.media?.bitcoin_confirmed);
+  const latestBtc = btcBlocks.find((b) => b.media?.bitcoin_block)?.media?.bitcoin_block ?? null;
+  const btcCell: AttestationCell = {
+    key: "btc", kind: "btc",
+    token: btcBlocks.length > 0 ? "btc:ts:confirmed" : "btc:ts:unconfirmed",
+    detail: btcBlocks.length > 0
+      ? (latestBtc ? `block ${latestBtc.toLocaleString()}` : `${btcBlocks.length} block${btcBlocks.length > 1 ? "s" : ""} confirmed`)
+      : total > 0 ? "awaiting confirmation" : "no blocks yet",
+    state: btcBlocks.length > 0 ? "confirmed" : "unconfirmed",
+    verified: btcBlocks.length > 0,
+  };
+
+  const cells = [registryCell, c2paCell, btcCell];
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", flexWrap: m ? "wrap" : "nowrap", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
+      {cells.map((c) => (
+        <AttestationCellView key={c.key} cell={c} mobile={m} />
+      ))}
+      <div style={{ width: m ? undefined : 210, flex: m ? "1 1 100%" : "none", display: "flex", alignItems: "center", gap: 9, padding: "15px 20px" }}>
+        <span className="tp-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: GR_ORANGE, flexShrink: 0 }} />
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, lineHeight: 1.5 }}>
+          re-checked hourly<br />{formatRecheckTs(updatedAt)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ===== Region 3: Identity =====
+// Avatar tile + name/handle/description + the new 3-way mode switch. Name and
+// description keep EditView's old inline-edit behaviour (Edit → Save toggle),
+// just relocated here since identity is now shared chrome across all three
+// modes instead of something EditView alone rendered.
+function ProfileIdentity({ mobile: m, slug }: { mobile: boolean; slug: string | null }) {
+  const store = useProfileStore();
+  const sharedToken = useAuthStore((s) => s.token);
+  const [fieldsEditing, setFieldsEditing] = useState(!store.companyName);
+  const [saving, setSaving] = useState(false);
+  const isBusiness = store.entityKind === "business";
+  const isPerson = isPersonKind(store.entityKind);
+  const isEdit = store.view === "edit";
+
+  const namePlaceholder = isBusiness ? "Company name" : store.entityKind === "journalist" ? "Your full name" : store.entityKind === "creator" ? "Your name / stage name" : isPerson ? "Your name" : "Organization name";
+  const descPlaceholder = isBusiness ? "What does your company do?" : store.entityKind === "journalist" ? "What do you cover? Where do you publish?" : store.entityKind === "creator" ? "Your medium, style, or practice." : isPerson ? "What do you do?" : "What does your organization do?";
+
+  const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    if (store.businessId && token) {
+      try {
+        await businessApi.update(store.businessId, { name: store.companyName, description: store.description }, token);
+      } catch {
+        // keep the optimistic "Saved" UX; a failed sync retries on next save
+      }
+    }
+    store.setSavedAt(new Date());
+    setSaving(false);
+    setFieldsEditing(false);
+  };
+
+  const modes: Array<{ key: ProfileView; label: string }> = [
+    { key: "edit", label: "Edit" },
+    { key: "visitor", label: "Visitor" },
+    { key: "agent", label: "Agent" },
+  ];
+
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 28, padding: m ? "24px 20px 20px" : "32px 34px 24px", flexWrap: m ? "wrap" : "nowrap" }}>
+      <div
+        style={{
+          width: m ? 72 : 104, height: m ? 72 : 104, flexShrink: 0,
+          border: `1px solid ${GR_BORDER}`, background: GR_STRIPE,
+          display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 9,
+        }}
+      >
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: GR_MUTED, letterSpacing: "0.4px" }}>avatar 1:1</span>
+      </div>
+
+      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          {isEdit && fieldsEditing ? (
+            <input
+              value={store.companyName}
+              onChange={(e) => store.setCompanyName(e.target.value)}
+              placeholder={namePlaceholder}
+              autoFocus
+              style={{ fontSize: m ? 24 : 34, fontWeight: 700, letterSpacing: "-1.1px", color: GR_INK, border: "none", background: "transparent", fontFamily: "inherit", margin: 0, flex: "1 1 260px", minWidth: 0 }}
+            />
+          ) : (
+            <h1 style={{ fontSize: m ? 24 : 34, fontWeight: 700, letterSpacing: "-1.1px", margin: 0, lineHeight: 1.02, color: GR_INK }}>
+              {store.companyName || namePlaceholder}
+            </h1>
+          )}
+          {slug && (
+            <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11.5, color: GR_PRIMARY, border: `1px solid ${GR_LILAC}`, padding: "3px 8px" }}>
+              tetapi.dev/{slug}
+            </span>
+          )}
+        </div>
+
+        {isEdit && fieldsEditing ? (
+          <textarea
+            value={store.description}
+            onChange={(e) => store.setDescription(e.target.value)}
+            placeholder={descPlaceholder}
+            rows={3}
+            style={{ width: "100%", maxWidth: 640, fontSize: 15.5, color: GR_BODY, lineHeight: 1.55, border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", margin: "13px 0 0" }}
+          />
+        ) : (
+          <p style={{ fontSize: 15.5, color: store.description ? GR_BODY : GR_MUTED, lineHeight: 1.55, margin: "13px 0 0", maxWidth: 640 }}>
+            {store.description || descPlaceholder}
+          </p>
+        )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 14, flexShrink: 0 }}>
+        <div style={{ display: "flex", border: `1px solid ${GR_BORDER}` }}>
+          {modes.map((md) => {
+            const active = store.view === md.key;
+            return (
+              <div
+                key={md.key}
+                onClick={() => store.setView(md.key)}
+                style={{ fontSize: 13, fontWeight: 600, padding: "9px 16px", cursor: "pointer", color: active ? "#fff" : GR_BODY, background: active ? GR_PRIMARY : "transparent", borderRight: `1px solid ${GR_BORDER}` }}
+              >
+                {md.label}
+              </div>
+            );
+          })}
+        </div>
+
+        {isEdit && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {store.savedAt && !fieldsEditing && !saving && (
+              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED }}>
+                saved {store.savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+            <button
+              onClick={fieldsEditing ? handleSave : () => setFieldsEditing(true)}
+              disabled={saving}
+              style={{
+                padding: "8px 15px", borderRadius: 4, border: "none",
+                background: saving ? "rgba(107,63,160,0.35)" : GR_PRIMARY,
+                color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                cursor: saving ? "default" : "pointer", display: "flex", alignItems: "center", gap: 6,
+              }}
+              onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
+              onMouseLeave={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
+            >
+              {saving ? <><SpinnerIcon size={12} /> Saving…</> : fieldsEditing ? "Save" : "Edit"}
+            </button>
+          </div>
+        )}
+
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, letterSpacing: "0.6px" }}>
+          shareable · agent-readable
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ===== Region 4: Facts strip =====
+// Four stats, all derived from real entity/block data — no stubs. "agent
+// lookups / 30d" has no backend source yet (no per-entity analytics endpoint
+// exists — see docs/known-issues.md), so it renders "—" rather than a
+// fabricated number until that lands.
+function FactsStrip({
+  mobile: m, verificationLevel, createdAt,
+}: {
+  mobile: boolean; verificationLevel: VerificationLevel | null; createdAt: string | null;
+}) {
+  const store = useProfileStore();
+  const signedBlocks = store.blocks.filter((b) => b.media?.c2pa_verified || b.media?.bitcoin_confirmed).length;
+  const registeredYear = store.registryData?.since ? yearOf(store.registryData.since) : yearOf(createdAt);
+  const stats = [
+    { k: "signed blocks", v: String(signedBlocks) },
+    { k: "trust level", v: `L${trustOrdinal(verificationLevel)}` },
+    { k: "registered", v: registeredYear },
+    { k: "agent lookups / 30d", v: "—" },
+  ];
+  return (
+    <div style={{ display: "flex", flexWrap: m ? "wrap" : "nowrap", borderTop: `1px solid ${GR_BORDER}`, borderBottom: `1px solid ${GR_BORDER}` }}>
+      {stats.map((s, i) => (
+        <div
+          key={s.k}
+          style={{
+            flex: m ? "1 1 50%" : 1, minWidth: 0, padding: "16px 34px 17px",
+            borderRight: i < stats.length - 1 ? `1px solid ${GR_BORDER}` : "none",
+          }}
+        >
+          <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.6px", lineHeight: 1, color: GR_INK }}>{s.v}</div>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10, letterSpacing: "1.2px", textTransform: "uppercase", color: GR_MUTED, marginTop: 7 }}>{s.k}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 export default function ProfilePage() {
   const vw = useViewport();
@@ -117,6 +457,15 @@ export default function ProfilePage() {
   // Public-page slug + published flag, for the "Share page" button.
   const [slug, setSlug] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
+
+  // Entity fields the new "Grid of Record" regions need (facts strip, attestation
+  // bar) that useProfileStore doesn't carry — kept local to this page rather than
+  // added to the shared store since nothing else reads them yet.
+  const [entityMeta, setEntityMeta] = useState<{
+    verificationLevel: VerificationLevel | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+  }>({ verificationLevel: null, createdAt: null, updatedAt: null });
 
   // Set by lib/api.ts's centralized 401 handler (any request, anywhere on this
   // page) — a dead token must never leave the page silently rendering as if
@@ -183,6 +532,7 @@ export default function ProfilePage() {
     store.setNameStatus("idle");
     store.setRegistryStatus(null);
     store.setRegistryData(null);
+    setEntityMeta({ verificationLevel: null, createdAt: null, updatedAt: null });
     let cancelled = false;
     (async () => {
       const [biz, blocks] = await Promise.all([
@@ -208,6 +558,11 @@ export default function ProfilePage() {
         }
         setSlug(biz.slug ?? null);
         setPublished(!!biz.is_published);
+        setEntityMeta({
+          verificationLevel: biz.verification_level ?? null,
+          createdAt: biz.created_at ?? null,
+          updatedAt: biz.updated_at ?? null,
+        });
       }
       store.setBlocks(blocks.map(mapServerBlock));
     })();
@@ -216,12 +571,6 @@ export default function ProfilePage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.businessId]);
-
-  const views: Array<{ key: ProfileView; label: string }> = [
-    { key: "edit", label: "Edit" },
-    { key: "visitor", label: "Preview as visitor" },
-    { key: "agent", label: "Preview as agent" },
-  ];
 
   return (
     <div
@@ -246,82 +595,48 @@ export default function ProfilePage() {
       {/* Content */}
       <div
         style={{
-          maxWidth: 880,
+          maxWidth: 1180,
           margin: "0 auto",
           padding: m ? `${APP_HEADER_H + 24}px 16px 100px` : `${APP_HEADER_H + 32}px 24px 100px`,
           position: "relative", zIndex: 1,
         }}
       >
         {sessionInvalid ? (
-          <SignedOutPanel
-            onSignIn={(token) => {
-              localStorage.setItem("auth_token", token);
-              store.setAuthToken(token);
-              useAuthStore.getState().setAuth(token);
-              setSessionInvalid(false);
-            }}
-          />
+          <div style={{ maxWidth: 880, margin: "0 auto" }}>
+            <SignedOutPanel
+              onSignIn={(token) => {
+                localStorage.setItem("auth_token", token);
+                store.setAuthToken(token);
+                useAuthStore.getState().setAuth(token);
+                setSessionInvalid(false);
+              }}
+            />
+          </div>
         ) : (
           <>
-            {published && slug && <SharePageButton slug={slug} mobile={m} />}
+            {/* Regions 1-4 ("Grid of Record", 3.15a) — nav (AppHeader above),
+                attestation bar, identity + mode switch, facts strip. Shared
+                across all three modes; only what's below differs (3.15b-f). */}
+            <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}`, marginBottom: 26 }}>
+              <AttestationBar mobile={m} updatedAt={entityMeta.updatedAt} />
+              <ProfileIdentity mobile={m} slug={slug} />
+              <FactsStrip mobile={m} verificationLevel={entityMeta.verificationLevel} createdAt={entityMeta.createdAt} />
+            </div>
 
-            {/* Remount on entity switch: VerifyMenu/BlockCard keep their own
-                useState (registryStatus, emailDone, linked, isPublished…) that
-                has no other trigger to clear when businessId changes (QA #18). */}
-            {store.view === "edit" && <EditView key={store.businessId ?? "new"} mobile={m} />}
-            {store.view === "visitor" && <VisitorView mobile={m} />}
-            {store.view === "agent" && <AgentView mobile={m} />}
+            {/* Regions 5+ — still 3.13's shipped UI until 3.15b-f land. */}
+            <div style={{ maxWidth: 880, margin: "0 auto" }}>
+              {published && slug && <SharePageButton slug={slug} mobile={m} />}
+
+              {/* Remount on entity switch: VerifyMenu/BlockCard keep their own
+                  useState (registryStatus, emailDone, linked, isPublished…) that
+                  has no other trigger to clear when businessId changes (QA #18). */}
+              {store.view === "edit" && <EditView key={store.businessId ?? "new"} mobile={m} />}
+              {store.view === "visitor" && <VisitorView mobile={m} />}
+              {store.view === "agent" && <AgentView mobile={m} />}
+            </div>
           </>
         )}
       </div>
-
-      {/* Fixed segmented control */}
-      {!sessionInvalid && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            padding: "4px",
-            gap: 2,
-            background: "rgba(255,255,255,0.55)",
-            border: "1px solid rgba(255,255,255,0.7)",
-            borderRadius: 14,
-            backdropFilter: "blur(14px) saturate(140%)",
-            WebkitBackdropFilter: "blur(14px) saturate(140%)",
-            boxShadow: "0 8px 26px rgba(45,55,120,0.10), inset 0 1px 0 rgba(255,255,255,0.9)",
-            zIndex: 30,
-          }}
-        >
-          {views.map(({ key, label }) => {
-            const active = store.view === key;
-            return (
-              <button
-                key={key}
-                onClick={() => store.setView(key)}
-                style={{
-                  padding: m ? "8px 12px" : "8px 16px",
-                  borderRadius: 10,
-                  border: "none",
-                  background: active ? "linear-gradient(180deg,#6E58D6,#5B45C9)" : "transparent",
-                  color: active ? "#fff" : "#5A4F78",
-                  fontSize: m ? 12 : 13.5,
-                  fontWeight: active ? 600 : 400,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  transition: "all 0.16s",
-                  whiteSpace: "nowrap",
-                  boxShadow: active ? "0 3px 10px rgba(91,69,201,0.28)" : "none",
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -433,35 +748,8 @@ function SharePageButton({ slug, mobile: m }: { slug: string; mobile: boolean })
 function EditView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
-  const [saving, setSaving] = useState(false);
-  // New/empty profiles start in edit mode (nothing to show yet); an existing
-  // filled-in profile starts read-only until the user explicitly hits Edit.
-  const [fieldsEditing, setFieldsEditing] = useState(!store.companyName);
-  const isBusiness = store.entityKind === "business";
-  const isPerson = isPersonKind(store.entityKind);
-
-  const namePlaceholder = isBusiness ? "Company name" : store.entityKind === "journalist" ? "Your full name" : store.entityKind === "creator" ? "Your name / stage name" : isPerson ? "Your name" : "Organization name";
-  const descPlaceholder = isBusiness ? "What does your company do?" : store.entityKind === "journalist" ? "What do you cover? Where do you publish?" : store.entityKind === "creator" ? "Your medium, style, or practice." : isPerson ? "What do you do?" : "What does your organization do?";
 
   const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
-
-  const handleSave = async () => {
-    setSaving(true);
-    if (store.businessId && token) {
-      try {
-        await businessApi.update(
-          store.businessId,
-          { name: store.companyName, description: store.description },
-          token
-        );
-      } catch {
-        // keep the optimistic "Saved" UX; a failed sync retries on next save
-      }
-    }
-    store.setSavedAt(new Date());
-    setSaving(false);
-    setFieldsEditing(false);
-  };
 
   // Persist the new block up front so it has a real id (needed for media upload).
   const handleAddBlock = async () => {
@@ -479,131 +767,11 @@ function EditView({ mobile: m }: { mobile: boolean }) {
 
   return (
     <div>
-      {/* Name */}
-      {fieldsEditing ? (
-        <input
-          value={store.companyName}
-          onChange={(e) => store.setCompanyName(e.target.value)}
-          placeholder={namePlaceholder}
-          autoFocus
-          style={{
-            width: "100%",
-            fontSize: m ? 32 : 44,
-            fontWeight: 600,
-            letterSpacing: "-1px",
-            color: "#1A1035",
-            border: "none",
-            background: "transparent",
-            fontFamily: "inherit",
-            marginBottom: 10,
-          }}
-        />
-      ) : (
-        <div
-          style={{
-            fontSize: m ? 32 : 44,
-            fontWeight: 600,
-            letterSpacing: "-1px",
-            color: "#1A1035",
-            marginBottom: 10,
-          }}
-        >
-          {store.companyName || <span style={{ color: "#D8D2E2" }}>{namePlaceholder}</span>}
-        </div>
-      )}
+      {/* Name/description/status-row moved to the shared ProfileIdentity +
+          AttestationBar regions (3.15a) — this view is now just blocks + the
+          verification menu. */}
 
-      {/* Status row */}
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {isBusiness ? (
-          <>
-            {store.registryStatus === "verified" && store.registryData && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#5B45C9", fontSize: 13.5, fontWeight: 600 }}>
-                  <VerificationIcon size={16} />✓ Verified in registry
-                </div>
-                <IsoChip code={store.registryData.iso} />
-                <span style={{ fontSize: 12.5, color: "#3A2C5C", fontWeight: 600 }}>{store.registryData.authority}</span>
-                <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: 11, color: "#9991AC" }}>
-                  {store.registryData.registryId}
-                </span>
-              </div>
-            )}
-            {store.registryStatus === "not_found" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#F59A2E", fontSize: 13.5 }}>
-                ✗ Not found in connected registries
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#5B45C9", fontSize: 13.5, fontWeight: 600 }}>
-            <VerificationIcon size={16} />✓ Email verified
-            <span style={{ fontSize: 12, color: "#9991AC", fontWeight: 400 }}>· identity:self-asserted</span>
-          </div>
-        )}
-
-        {/* Edit / Save toggle — defaults to "Edit", becomes "Save" only once
-            the user has actually entered edit mode (QA #26/#27). */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-          {store.savedAt && !fieldsEditing && !saving && (
-            <span style={{ fontSize: 12, color: "#9991AC" }}>
-              Saved {store.savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          )}
-          <button
-            onClick={fieldsEditing ? handleSave : () => setFieldsEditing(true)}
-            disabled={saving}
-            style={{
-              padding: "7px 16px", borderRadius: 8,
-              background: saving ? "rgba(91,69,201,0.12)" : fieldsEditing ? "linear-gradient(180deg,#6E58D6,#5B45C9)" : "rgba(91,69,201,0.06)",
-              color: saving ? "#9991AC" : fieldsEditing ? "#fff" : "#5B45C9",
-              fontSize: 13, fontWeight: 600, border: fieldsEditing ? "none" : "1px solid rgba(91,69,201,0.3)",
-              boxShadow: fieldsEditing && !saving ? "0 4px 12px rgba(91,69,201,0.28)" : "none",
-              cursor: saving ? "default" : "pointer", fontFamily: "inherit",
-              display: "flex", alignItems: "center", gap: 6,
-            }}
-          >
-            {saving ? <><SpinnerIcon size={12} /> Saving…</> : fieldsEditing ? "Save" : "Edit"}
-          </button>
-        </div>
-      </div>
-
-      {/* Description */}
-      {fieldsEditing ? (
-        <textarea
-          value={store.description}
-          onChange={(e) => store.setDescription(e.target.value)}
-          placeholder={descPlaceholder}
-          rows={3}
-          style={{
-            width: "100%",
-            fontSize: 17,
-            fontWeight: 300,
-            color: "#5A4F78",
-            border: "none",
-            background: "transparent",
-            fontFamily: "inherit",
-            resize: "vertical",
-            lineHeight: 1.6,
-            marginBottom: 32,
-          }}
-        />
-      ) : (
-        <div
-          style={{
-            fontSize: 17,
-            fontWeight: 300,
-            color: store.description ? "#5A4F78" : "#D8D2E2",
-            lineHeight: 1.6,
-            marginBottom: 32,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {store.description || "No description yet."}
-        </div>
-      )}
-
-      {/* Blocks — the primary object on the page (QA #29), right after the
-          identity fields, well above the verification/publish menu. */}
+      {/* Blocks — the primary object on the page (QA #29). */}
       <div
         style={{
           display: "flex",
@@ -1931,56 +2099,12 @@ function PiCamModal({
 // ===== Visitor View =====
 function VisitorView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
-  const isBusiness = store.entityKind === "business";
-  const hasC2pa = store.blocks.some((b) => b.media?.phase === "done" && b.media.source === "pi_camera");
-  const level = isBusiness
-    ? store.registryStatus === "verified" ? "registry" : "unverified"
-    : hasC2pa ? "full" : "email";
-  const accentColor = level === "full" ? "#5B45C9" : level === "email" ? "#5B45C9" : level === "registry" ? "#B8B2C8" : "#D8D2E2";
-  const levelLabel = level === "full" ? "Full Verification" : level === "email" ? "Email Verified" : level === "registry" ? "Registry Only" : "Unverified";
-  const badges = isBusiness
-    ? level === "registry" ? ["Registry"] : []
-    : level === "full" ? ["Email Verified", "C2PA Media", "Bitcoin TS"] : ["Email Verified"];
 
+  // Name/verification-badges/description now come from the shared
+  // ProfileIdentity + AttestationBar regions above (3.15a) — this view is
+  // just the block list.
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: accentColor }} />
-        <span style={{ fontSize: m ? 28 : 36, fontWeight: 600, letterSpacing: "-0.8px" }}>
-          {store.companyName || "Business Name"}
-        </span>
-        <span
-          style={{
-            fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-            fontSize: 10,
-            letterSpacing: "1.2px",
-            textTransform: "uppercase",
-            color: accentColor,
-            marginLeft: "auto",
-          }}
-        >
-          {levelLabel}
-        </span>
-      </div>
-
-      <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginBottom: 20, marginLeft: 18 }}>
-        {badges.map((b) => (
-          <BadgePill key={b} text={b} />
-        ))}
-      </div>
-
-      <div
-        style={{
-          fontSize: 16,
-          color: "#5A4F78",
-          lineHeight: 1.6,
-          marginBottom: 32,
-          fontWeight: 300,
-        }}
-      >
-        {store.description || "No description yet."}
-      </div>
-
       {store.blocks.map((block) => (
         <div
           key={block.id}

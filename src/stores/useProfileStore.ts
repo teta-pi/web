@@ -16,6 +16,7 @@ export interface BlockMedia {
   original_hash?: string | null;
   c2pa_verified?: boolean;
   bitcoin_confirmed?: boolean;
+  bitcoin_block?: number | null;
 }
 
 export interface ProfileBlock {

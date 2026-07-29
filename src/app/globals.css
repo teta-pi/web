@@ -90,6 +90,12 @@ a {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
 }
+/* "Grid of Record" (3.15) status-cell dot — distinct timing/opacity from the
+   generic `pulse` above, matching docs/design/profile-grid-of-record exactly. */
+@keyframes tp-pulse {
+  0%, 100% { opacity: .35; }
+  50% { opacity: 1; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
@@ -100,6 +106,9 @@ a {
 }
 .bob {
   animation: bob 7s ease-in-out infinite;
+}
+.tp-pulse {
+  animation: tp-pulse 2.4s ease-in-out infinite;
 }
 
 /* Glass card */
