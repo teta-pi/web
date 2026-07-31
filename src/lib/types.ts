@@ -93,19 +93,6 @@ export interface SearchResult {
   agent_endpoint_verified: boolean;
 }
 
-// UI-level search result with derived display fields
-export interface DisplaySearchResult extends SearchResult {
-  accentColor: string;
-  levelLabel: string;
-  iso: string;
-  authority: string;
-  requirement: string;
-  registryId: string;
-  hash: string;
-  badgePills: Array<{ text: string }>;
-  hasVideo: boolean;
-}
-
 export interface User {
   id: string;
   email: string;
