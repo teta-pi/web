@@ -17,6 +17,11 @@ export interface BlockMedia {
   c2pa_verified?: boolean;
   bitcoin_confirmed?: boolean;
   bitcoin_block?: number | null;
+  // The server's actual media kind (video/photo/file) — distinct from `source`
+  // above, which is the upload *mechanism*, not the content type. Drives the
+  // square ledger's per-tile KIND label and filter chips (3.15b).
+  type?: "video" | "photo" | "file";
+  uploaded_at?: string;
 }
 
 export interface ProfileBlock {
@@ -24,6 +29,7 @@ export interface ProfileBlock {
   title: string;
   desc: string;
   media: BlockMedia | null;
+  createdAt?: string;
 }
 
 export type ProfileEntityKind = EntityKind;
