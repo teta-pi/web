@@ -33,8 +33,8 @@ const isServerBlock = (id: string) => !id.startsWith("block-");
 // /claim writes directly to useProfileStore + a bare "auth_token" localStorage
 // key. Each component reads `useAuthStore((s) => s.token)` first (reactive, so
 // it updates the moment a user signs in) and falls back to the claim flow's
-// token for users who arrived that way instead — see EditView, StatementTile,
-// BlockEditPanel and PiCamButton below.
+// token for users who arrived that way instead — see ProfilePage, StatementTile,
+// BlockEditPanel, VerifyMenu and PiCamButton below.
 
 // Map a persisted block from the API onto the store's block shape.
 function mapServerBlock(b: Block): ProfileBlock {
@@ -191,7 +191,7 @@ function blockMarks(block: ProfileBlock): Array<"c2pa" | "btc"> {
 // from the entity's real registry/block data, never hardcoded, plus a status
 // cell with the pulsing re-check dot. Region 2 is entirely new (no 3.13
 // equivalent); it supersedes the inline "✓ Verified in registry" status row
-// EditView used to render next to the name (see EditView below).
+// the old EditView used to render next to the name.
 type SealKind = "registry" | "c2pa" | "btc";
 
 function SealGlyph({ kind, verified, size = 14 }: { kind: SealKind; verified: boolean; size?: number }) {
@@ -746,6 +746,7 @@ export default function ProfilePage() {
   const m = vw < 640;
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
+  const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
   // Public-page slug + published flag, for the "Share page" button.
   const [slug, setSlug] = useState<string | null>(null);
@@ -915,15 +916,28 @@ export default function ProfilePage() {
           <>
             {/* Regions 1-6 ("Grid of Record") — nav (AppHeader above),
                 attestation bar, identity + mode switch, facts strip (3.15a),
-                ledger controls + square ledger (3.15b). Shared across all
-                three modes — region 6 shows in Edit/Visitor/Agent alike per
-                spec, only the add-tile/drag are edit-only. What's left below
-                (verification tiles, modal, visitor footer/agent panel,
-                mobile) is 3.15c-f. */}
+                verification & publishing tiles (3.15c, Edit mode only, region
+                5a — sits between facts strip and ledger controls per spec
+                order), ledger controls + square ledger (3.15b). Regions 1-4/6
+                shared across all three modes; 5a is Edit-only. What's left
+                below (detail modal, visitor footer/agent panel, mobile) is
+                3.15d-f. */}
             <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}`, marginBottom: 26 }}>
               <AttestationBar mobile={m} updatedAt={entityMeta.updatedAt} />
               <ProfileIdentity mobile={m} slug={slug} />
               <FactsStrip mobile={m} verificationLevel={entityMeta.verificationLevel} createdAt={entityMeta.createdAt} />
+              {/* Remount on entity switch: VerifyMenu keeps its own useState
+                  (registryStatus, emailDone, linked, isPublished…) that has
+                  no other trigger to clear when businessId changes (QA #18). */}
+              {store.view === "edit" && (
+                <VerifyMenu
+                  key={store.businessId ?? "new"}
+                  businessId={store.businessId}
+                  token={token}
+                  mobile={m}
+                  entityKind={store.entityKind}
+                />
+              )}
               <LedgerControls
                 mobile={m}
                 filter={ledgerFilter}
@@ -955,14 +969,10 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Regions 5a/7/8 — still 3.13's shipped UI until 3.15c/e land. */}
+            {/* Regions 7/8 — still 3.13's shipped UI until 3.15e lands. */}
             <div style={{ maxWidth: 880, margin: "0 auto" }}>
               {published && slug && <SharePageButton slug={slug} mobile={m} />}
 
-              {/* Remount on entity switch: VerifyMenu keeps its own useState
-                  (registryStatus, emailDone, linked, isPublished…) that has
-                  no other trigger to clear when businessId changes (QA #18). */}
-              {store.view === "edit" && <EditView key={store.businessId ?? "new"} mobile={m} />}
               {store.view === "visitor" && <VisitorView mobile={m} />}
               {store.view === "agent" && <AgentView mobile={m} />}
             </div>
@@ -1077,23 +1087,6 @@ function SharePageButton({ slug, mobile: m }: { slug: string; mobile: boolean })
 // compact icon menu (QA #28/#31) below the blocks, not full-width strips.
 // Name/description default to read-only with an explicit Edit→Save toggle
 // (QA #26/#27) instead of always-editable fields.
-function EditView({ mobile: m }: { mobile: boolean }) {
-  const store = useProfileStore();
-  const sharedToken = useAuthStore((s) => s.token);
-  const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
-
-  // Name/description/status-row moved to ProfileIdentity/AttestationBar
-  // (3.15a); blocks moved to the shared LedgerControls/StatementLedger
-  // (3.15b) since region 6 shows in every mode, not just Edit. This view is
-  // now just the verification menu — 3.15c replaces it with the spec's 6-up
-  // action-tile row.
-  return (
-    <div>
-      <VerifyMenu businessId={store.businessId} token={token} mobile={m} entityKind={store.entityKind} />
-    </div>
-  );
-}
-
 // ===== Verification methods chooser =====
 // Registry / Email / Domain are ACTIVE (each wires to its /verify/* endpoint and
 // writes an append-only verification_events row on success). Document Upload is
@@ -1108,10 +1101,6 @@ const V_MUTED = "#9991AC";
 const V_TEXT = "#1A1035";
 const V_SEC = "#5A4F78";
 
-const vSectionLabel: React.CSSProperties = {
-  fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-  fontSize: 10.5, letterSpacing: "1.4px", textTransform: "uppercase", color: V_MUTED,
-};
 const vInput: React.CSSProperties = {
   padding: "10px 13px", borderRadius: 9, border: "1.5px solid rgba(26,16,53,0.15)",
   fontSize: 14, fontFamily: "inherit", color: V_TEXT, outline: "none", width: "100%",
@@ -1203,53 +1192,56 @@ function StatusPill({ text, color }: { text: string; color: string }) {
 
 type VerifyMenuKey = "registry" | "email" | "domain" | "document" | "legal" | "publish";
 
-// A single icon button in the compact menu row. `done` draws a small status
-// dot (green when live/verified, amber for "not found", nothing otherwise)
-// so the whole verification state is scannable without opening anything.
-function MenuIconButton({
-  icon, label, active, dotColor, onClick, disabled,
+// ===== Region 5a: Verification & publishing action tiles =====
+// Replaces the old MenuIconButton (round icon + tiny label, glass style)
+// with the spec's 56px-tall horizontal bars. State machine matches
+// verifySteps() in the design's HTML source exactly (not approximated):
+// verified always shows purple status text even for Publish (whose OWN
+// accent — border/glyph/dot when selected-or-done — is orange); "in
+// progress" status text is always orange regardless of item; label stays
+// ink-colored in every state. Domain's old distinct green accent is retired
+// — the new design only differentiates Publish (orange), everything else
+// purple, matching AttestationBar/StatementTile's reduced palette.
+function VerifyActionTile({
+  label, icon, done, selected, accent, onClick,
 }: {
-  icon: React.ReactNode; label: string; active: boolean;
-  dotColor: string | null; onClick: () => void; disabled?: boolean;
+  label: string; icon: React.ReactNode; done: boolean; selected: boolean;
+  accent: string; onClick: () => void;
 }) {
+  const [hover, setHover] = useState(false);
+  const border = hover ? GR_PRIMARY : selected ? accent : GR_BORDER;
+  const status = done ? "verified" : selected ? "in progress" : "pending";
+  const statusColor = done ? GR_PRIMARY : selected ? GR_ORANGE : GR_MUTED;
+
   return (
-    <button
+    <div
       onClick={onClick}
-      disabled={disabled}
-      title={label}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-        width: 62, padding: "10px 4px 8px",
-        border: active ? `1.5px solid ${V_INDIGO}` : "1px solid rgba(255,255,255,0.7)",
-        borderRadius: 12,
-        background: active ? "rgba(91,69,201,0.08)" : "rgba(255,255,255,0.45)",
-        backdropFilter: "blur(12px) saturate(130%)",
-        WebkitBackdropFilter: "blur(12px) saturate(130%)",
-        boxShadow: "0 6px 16px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-        fontFamily: "inherit",
+        position: "relative", height: 56, border: `1px solid ${border}`,
+        background: selected ? GR_TINT : "#fff", cursor: "pointer",
+        display: "flex", alignItems: "center", gap: 11, padding: "0 12px",
       }}
     >
-      <span style={{ position: "relative", display: "flex" }}>
-        {icon}
-        {dotColor && (
-          <span style={{
-            position: "absolute", top: -2, right: -3, width: 7, height: 7,
-            borderRadius: "50%", background: dotColor, border: "1.5px solid #fff",
-          }} />
-        )}
-      </span>
-      <span style={{ fontSize: 10, color: V_MUTED, fontWeight: 600, whiteSpace: "nowrap" }}>{label}</span>
-    </button>
+      {icon}
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: GR_INK, letterSpacing: "-0.1px" }}>{label}</div>
+        <div style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, letterSpacing: "0.6px", color: statusColor, marginTop: 3 }}>{status}</div>
+      </div>
+      {done && (
+        <span style={{ position: "absolute", top: 9, right: 9, width: 6, height: 6, borderRadius: "50%", background: GR_PRIMARY }} />
+      )}
+    </div>
   );
 }
 
 // Verifiers + Registry Match + Document Upload + Legal Entity + Publish &
-// Privacy, collapsed into one compact icon-based menu (QA #28/#31) instead of
-// five full-width strips. One item's panel is open at a time (accordion),
-// directly beneath the icon row. Merges the previous VerificationSection and
-// PublishSection so the row spans both — icons stay tiny, the page stays short.
+// Privacy, as the spec's 6-up row of low action tiles (3.15c) — was a round
+// icon-button row (QA #28/#31) before that. One item's panel (MethodCard,
+// unchanged from 3.13) is open at a time, directly beneath the tile row —
+// only the tile row's chrome changed this session, not the verification
+// flows or panels themselves.
 function VerifyMenu({
   businessId, token, mobile: m, entityKind,
 }: { businessId: string | null; token: string | null; mobile: boolean; entityKind: EntityKind }) {
@@ -1429,54 +1421,68 @@ function VerifyMenu({
 
   const registryVerified = registryStatus === "verified";
 
-  const menuItems: Array<{
-    key: VerifyMenuKey; icon: React.ReactNode; label: string; dotColor: string | null; disabled?: boolean;
+  // Real per-step done/selected state feeds VerifyActionTile's glyph/border/
+  // status coloring — see the state-machine note above the component. Icon
+  // colors are resolved here (not inside the tile) since they depend on the
+  // same done/selected/accent inputs the tile itself only has as props.
+  const verifyItems: Array<{
+    key: VerifyMenuKey; label: string; done: boolean; accent: string; icon: React.ReactNode;
   } | false> = [
     isBusinessKind && {
-      key: "registry", icon: <BuildingIcon size={18} color={registryVerified ? V_INDIGO : V_MUTED} />,
-      label: "Registry", dotColor: registryVerified ? V_INDIGO : registryStatus === "not_found" ? V_SUN : null,
+      key: "registry", label: "Registry", done: registryVerified, accent: GR_PRIMARY,
+      icon: <BuildingIcon size={18} color={registryVerified || activeKey === "registry" ? GR_PRIMARY : GR_MUTED} />,
     },
     {
-      key: "email", icon: <MailIcon size={18} color={emailDone ? V_INDIGO : V_MUTED} />,
-      label: "Email", dotColor: emailDone ? V_INDIGO : null,
+      key: "email", label: "Email", done: emailDone, accent: GR_PRIMARY,
+      icon: <MailIcon size={18} color={emailDone || activeKey === "email" ? GR_PRIMARY : GR_MUTED} />,
     },
     {
-      key: "domain", icon: <GlobeIcon size={18} color={domainDone ? V_GREEN : V_MUTED} />,
-      label: "Domain", dotColor: domainDone ? V_GREEN : null,
+      key: "domain", label: "Domain", done: domainDone, accent: GR_PRIMARY,
+      icon: <GlobeIcon size={18} color={domainDone || activeKey === "domain" ? GR_PRIMARY : GR_MUTED} />,
+    },
+    // Document upload has no working backend flow yet (Coming soon, see the
+    // panel below) — never "done"; still selectable, panel shows the disabled
+    // state.
+    isBusinessKind && {
+      key: "document", label: "Document", done: false, accent: GR_PRIMARY,
+      icon: <DocumentIcon size={18} color={activeKey === "document" ? GR_PRIMARY : GR_MUTED} />,
     },
     isBusinessKind && {
-      key: "document", icon: <DocumentIcon size={18} color={V_MUTED} />,
-      label: "Document", dotColor: null, disabled: false,
-    },
-    isBusinessKind && {
-      key: "legal", icon: <LinkIcon size={18} color={linked ? V_INDIGO : V_MUTED} />,
-      label: "Legal", dotColor: linked ? V_INDIGO : null,
+      key: "legal", label: "Legal", done: !!linked, accent: GR_PRIMARY,
+      icon: <LinkIcon size={18} color={!!linked || activeKey === "legal" ? GR_PRIMARY : GR_MUTED} />,
     },
     {
-      key: "publish", icon: <ShieldIcon size={18} color={isPublished ? (isPublic ? V_GREEN : V_MUTED) : V_MUTED} />,
-      label: "Publish", dotColor: isPublished ? (isPublic ? V_GREEN : V_MUTED) : null,
+      key: "publish", label: "Publish", done: isPublished, accent: GR_ORANGE,
+      icon: <ShieldIcon size={18} color={isPublished || activeKey === "publish" ? GR_ORANGE : GR_MUTED} />,
     },
   ];
+  const visibleVerifyItems = verifyItems.filter(Boolean) as Exclude<typeof verifyItems[number], false>[];
 
   return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ ...vSectionLabel, marginBottom: 14 }}>Verification &amp; publishing</div>
+    <div style={{ padding: m ? "22px 16px 0" : "22px 34px 0" }}>
+      <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.6px", textTransform: "uppercase", color: GR_PRIMARY, marginBottom: 12 }}>
+        Verification &amp; publishing
+      </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: activeKey ? 14 : 0 }}>
-        {menuItems.filter(Boolean).map((item) => {
-          const it = item as Exclude<typeof menuItems[number], false>;
-          return (
-            <MenuIconButton
-              key={it.key}
-              icon={it.icon}
-              label={it.label}
-              active={activeKey === it.key}
-              dotColor={it.dotColor}
-              disabled={it.disabled}
-              onClick={() => toggle(it.key)}
-            />
-          );
-        })}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${m ? Math.min(3, visibleVerifyItems.length) : visibleVerifyItems.length}, 1fr)`,
+          gap: 10,
+          marginBottom: activeKey ? 14 : 0,
+        }}
+      >
+        {visibleVerifyItems.map((it) => (
+          <VerifyActionTile
+            key={it.key}
+            label={it.label}
+            icon={it.icon}
+            done={it.done}
+            selected={activeKey === it.key}
+            accent={it.accent}
+            onClick={() => toggle(it.key)}
+          />
+        ))}
       </div>
 
       {/* Official Registry Match — business/organization only */}
