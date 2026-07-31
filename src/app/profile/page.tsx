@@ -33,8 +33,8 @@ const isServerBlock = (id: string) => !id.startsWith("block-");
 // /claim writes directly to useProfileStore + a bare "auth_token" localStorage
 // key. Each component reads `useAuthStore((s) => s.token)` first (reactive, so
 // it updates the moment a user signs in) and falls back to the claim flow's
-// token for users who arrived that way instead — see EditView, BlockCard and
-// PiCamButton below.
+// token for users who arrived that way instead — see EditView, StatementTile,
+// BlockEditPanel and PiCamButton below.
 
 // Map a persisted block from the API onto the store's block shape.
 function mapServerBlock(b: Block): ProfileBlock {
@@ -43,6 +43,7 @@ function mapServerBlock(b: Block): ProfileBlock {
     id: b.id,
     title: b.title ?? "",
     desc: b.description ?? "",
+    createdAt: b.created_at,
     media: media
       ? {
           source: media.c2pa_verified ? "pi_camera" : "file",
@@ -53,6 +54,8 @@ function mapServerBlock(b: Block): ProfileBlock {
           c2pa_verified: media.c2pa_verified,
           bitcoin_confirmed: media.bitcoin_confirmed,
           bitcoin_block: media.bitcoin_block,
+          type: media.type,
+          uploaded_at: media.uploaded_at,
         }
       : null,
   };
@@ -122,6 +125,7 @@ const GR_BORDER = "#E2DCF0";
 const GR_RAISED = "#FBFAFD";
 const GR_MONO_FONT = "ui-monospace,'SF Mono',Menlo,monospace";
 const GR_STRIPE = "repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px)";
+const GR_INKSTRIPE = "repeating-linear-gradient(45deg,#241847 0 6px,#1A1035 6px 12px)";
 
 // none < registry/email/domain < partial < full < live — used only to derive
 // the facts strip's compact "L{n}" trust stat from the real backend enum.
@@ -148,6 +152,38 @@ function formatRecheckTs(iso: string | null): string {
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
   return `${day} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} · ${hh}:${mm}Z`;
+}
+
+// Matches the spec's "12 JUN 2026" tile-meta format (no time component).
+function formatTileDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+// ===== Regions 5-6: Ledger controls + square ledger =====
+// The real data model has no "audio" media type (MediaItem.type is only
+// video|photo|file) and no per-block registry association — both spec
+// concepts (filter chips include "audio"; a seal can include "registry")
+// don't map onto real data, so KIND drops audio in favor of the real "file"
+// bucket, and per-block marks are c2pa/btc only (see docs/changelog.md).
+type LedgerKind = "VIDEO" | "PHOTO" | "TEXT" | "FILE";
+type LedgerFilter = "ALL" | LedgerKind;
+
+function blockKind(block: ProfileBlock): LedgerKind {
+  if (!block.media) return "TEXT";
+  if (block.media.type === "video") return "VIDEO";
+  if (block.media.type === "photo") return "PHOTO";
+  return "FILE";
+}
+
+function blockMarks(block: ProfileBlock): Array<"c2pa" | "btc"> {
+  const marks: Array<"c2pa" | "btc"> = [];
+  if (block.media?.c2pa_verified) marks.push("c2pa");
+  if (block.media?.bitcoin_confirmed) marks.push("btc");
+  return marks;
 }
 
 // ===== Region 2: Attestation bar =====
@@ -447,6 +483,263 @@ function FactsStrip({
   );
 }
 
+// ===== Region 6: Statement tile =====
+// The core ledger component. Square, three stacked rows (head/media/foot) +
+// a hover provenance overlay, matching the spec exactly. Draggable only in
+// Edit mode (persists via the same blockApi.reorder/persistBlockOrder the old
+// 3.13 BlockCard already used — that endpoint already exists, see changelog).
+// Clicking a tile in Edit mode opens BlockEditPanel below the grid — the real
+// click-to-open-modal interaction is 3.15d; this is the bridge until then so
+// title/description editing and media upload don't regress in the meantime.
+function StatementTile({
+  block, index, isEdit, onEditClick,
+}: {
+  block: ProfileBlock; index: number; isEdit: boolean; onEditClick: () => void;
+}) {
+  const store = useProfileStore();
+  const sharedToken = useAuthStore((s) => s.token);
+  const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+  const [hover, setHover] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const kind = blockKind(block);
+  const marks = blockMarks(block);
+  const dark = kind === "VIDEO";
+  const isDragging = store.dragId === block.id;
+  const resolvedUrl = block.media?.storage_url ? mediaUrl(block.media.storage_url) : null;
+  // Real signed media is worth showing, unlike the spec's decorative-only
+  // placeholders (this app has actual evidence, not just a mock) — video
+  // keeps the spec's literal ink-stripe treatment (no inline video embeds in
+  // a dense grid), photo shows the real upload when it resolves.
+  const showRealImage = kind === "PHOTO" && !!resolvedUrl && !imgError;
+
+  const mediaLabel =
+    kind === "VIDEO" ? "video source" :
+    kind === "PHOTO" ? "photo source" :
+    kind === "FILE" ? "file source" :
+    "plain text · no media";
+  const mediaLabelColor = dark ? GR_LILAC : GR_MUTED;
+
+  // Real per-block marks max out at 2 (c2pa + btc — no per-block registry
+  // association exists), so "full chain" here means both, not three.
+  const sealState = marks.length === 2 ? "full chain" : marks.length === 1 ? "partial" : "unsigned";
+  const sealColor = marks.length === 2 ? GR_PRIMARY : marks.length === 1 ? GR_ORANGE : GR_MUTED;
+
+  const hashLabel = block.media?.original_hash
+    ? `sha256:${block.media.original_hash.slice(0, 10)}…${block.media.original_hash.slice(-6)}`
+    : "no signature yet";
+  const dateLabel = formatTileDate(block.media?.uploaded_at ?? block.createdAt);
+
+  return (
+    <div
+      draggable={isEdit}
+      onDragStart={() => {
+        if (!isEdit) return;
+        dragSnapshot = useProfileStore.getState().blocks;
+        store.setDragId(block.id);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!isEdit) return;
+        const { dragId, blocks } = useProfileStore.getState();
+        if (!dragId || dragId === block.id) return;
+        const from = blocks.findIndex((b) => b.id === dragId);
+        const to = blocks.findIndex((b) => b.id === block.id);
+        if (from === -1 || to === -1 || from === to) return;
+        store.reorderBlocks(from, to);
+      }}
+      onDrop={(e) => e.preventDefault()}
+      onDragEnd={() => {
+        store.setDragId(null);
+        persistBlockOrder(token);
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => { if (isEdit) onEditClick(); }}
+      style={{
+        position: "relative", aspectRatio: "1", border: `1px solid ${hover ? GR_PRIMARY : GR_BORDER}`,
+        background: "#fff", cursor: isEdit ? "grab" : "default",
+        opacity: isDragging ? 0.3 : 1, display: "flex", flexDirection: "column", overflow: "hidden",
+      }}
+    >
+      {/* Head */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", borderBottom: "1px solid #F1EDF9", flexShrink: 0 }}>
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_MUTED, letterSpacing: "0.6px" }}>
+          {String(index + 1).padStart(2, "0")} · {kind}
+        </span>
+        <span style={{ display: "flex", gap: 4 }}>
+          {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={8} />)}
+        </span>
+      </div>
+
+      {/* Media */}
+      <div style={{ flex: 1, minHeight: 0, position: "relative", background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {showRealImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolvedUrl!}
+            alt=""
+            onError={() => setImgError(true)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: mediaLabelColor, letterSpacing: "0.6px" }}>{mediaLabel}</span>
+        )}
+      </div>
+
+      {/* Foot */}
+      <div style={{ padding: "12px 13px 13px", borderTop: "1px solid #F1EDF9", flexShrink: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.3, letterSpacing: "-0.2px", color: GR_INK }}>
+          {block.title || "Untitled block"}
+        </div>
+        <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, marginTop: 7 }}>{dateLabel}</div>
+      </div>
+
+      {/* Hover overlay */}
+      <div
+        style={{
+          position: "absolute", inset: 0, background: "rgba(26,16,53,0.93)",
+          opacity: hover ? 1 : 0, transition: "opacity .16s ease", pointerEvents: "none",
+          padding: 14, display: "flex", flexDirection: "column", justifyContent: "space-between",
+        }}
+      >
+        <div>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, letterSpacing: "1.4px", textTransform: "uppercase", color: sealColor }}>
+            {sealState}
+          </div>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, color: GR_LILAC, lineHeight: 1.7, marginTop: 12, wordBreak: "break-all" }}>
+            {hashLabel}<br />{dateLabel}
+          </div>
+        </div>
+        <div style={{ fontSize: 12.5, color: "#fff", lineHeight: 1.45 }}>{block.desc || "No description yet."}</div>
+      </div>
+    </div>
+  );
+}
+
+function AddBlockTile({ onAdd }: { onAdd: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={onAdd}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        aspectRatio: "1", border: `1px dashed ${hover ? GR_PRIMARY : GR_LILAC}`, background: hover ? GR_TINT : GR_RAISED,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 9, cursor: "pointer",
+      }}
+    >
+      <span style={{ fontSize: 28, fontWeight: 300, color: GR_PRIMARY, lineHeight: 1 }}>+</span>
+      <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_PRIMARY, letterSpacing: "0.8px" }}>ADD BLOCK</span>
+      {/* "audio" dropped — no backing media type today, see blockKind() above */}
+      <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: GR_MUTED }}>video · photo · text · file</span>
+    </div>
+  );
+}
+
+// ===== Region 5: Ledger controls =====
+function LedgerControls({
+  mobile: m, filter, setFilter, isEdit, businessId, entityName, total,
+}: {
+  mobile: boolean; filter: LedgerFilter; setFilter: (f: LedgerFilter) => void; isEdit: boolean;
+  businessId: string | null; entityName: string; total: number;
+}) {
+  const filters: LedgerFilter[] = ["ALL", "VIDEO", "PHOTO", "TEXT", "FILE"];
+  // "click to inspect" (the block detail modal) isn't wired yet — 3.15d — so
+  // the hint only claims what's actually true this session.
+  const hint = isEdit ? "drag a square to reorder · click to edit" : "";
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, padding: "22px 34px 15px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.6px", textTransform: "uppercase", color: GR_PRIMARY }}>
+          Statements
+        </span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {filters.map((f) => {
+            const active = filter === f;
+            return (
+              <span
+                key={f}
+                onClick={() => setFilter(f)}
+                style={{
+                  fontFamily: GR_MONO_FONT, fontSize: 10.5, letterSpacing: "0.6px", padding: "6px 11px", cursor: "pointer",
+                  color: active ? GR_INK : GR_MUTED, border: `1px solid ${active ? GR_PRIMARY : GR_BORDER}`,
+                  background: active ? GR_TINT : "#fff",
+                }}
+              >
+                {f === "ALL" ? `all ${total}` : f.toLowerCase()}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        {hint && <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_MUTED }}>{hint}</span>}
+        {/* Connect Camera lives next to the blocks it feeds (QA #30) — moved
+            here from the old EditView now that blocks are a shared region. */}
+        {isEdit && <PiCamButton businessId={businessId} entityName={entityName} />}
+      </div>
+    </div>
+  );
+}
+
+// ===== Region 6: Square ledger grid =====
+function StatementLedger({
+  mobile: m, filter, isEdit, editingBlockId, setEditingBlockId,
+}: {
+  mobile: boolean; filter: LedgerFilter; isEdit: boolean;
+  editingBlockId: string | null; setEditingBlockId: (id: string | null) => void;
+}) {
+  const store = useProfileStore();
+  const sharedToken = useAuthStore((s) => s.token);
+  const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+
+  // Index reflects each block's real position in store.blocks, not its
+  // position in the filtered/visible list — filtering must not renumber or
+  // break reorder's from/to lookups.
+  const indexed = store.blocks.map((b, i) => ({ block: b, index: i }));
+  const visible = filter === "ALL" ? indexed : indexed.filter(({ block }) => blockKind(block) === filter);
+
+  // Persist the new block up front so it has a real id (needed for media upload).
+  const handleAddBlock = async () => {
+    if (store.businessId && token) {
+      try {
+        const created = await blockApi.add(store.businessId, "", undefined, token, store.blocks.length);
+        const mapped = mapServerBlock(created);
+        store.addBlock(mapped);
+        setEditingBlockId(mapped.id);
+        return;
+      } catch {
+        // fall through to a local-only block if the API is unreachable
+      }
+    }
+    store.addBlock();
+    const blocks = useProfileStore.getState().blocks;
+    const last = blocks[blocks.length - 1];
+    if (last) setEditingBlockId(last.id);
+  };
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: m ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: 10, padding: "0 34px 34px" }}>
+      {visible.map(({ block, index }) => (
+        <StatementTile
+          key={block.id}
+          block={block}
+          index={index}
+          isEdit={isEdit}
+          onEditClick={() => setEditingBlockId(editingBlockId === block.id ? null : block.id)}
+        />
+      ))}
+      {isEdit && <AddBlockTile onAdd={handleAddBlock} />}
+      {!isEdit && visible.length === 0 && (
+        <div style={{ gridColumn: "1 / -1", padding: "40px 0", textAlign: "center", color: GR_MUTED, fontSize: 13.5 }}>
+          No statements yet.
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const vw = useViewport();
@@ -457,6 +750,12 @@ export default function ProfilePage() {
   // Public-page slug + published flag, for the "Share page" button.
   const [slug, setSlug] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
+
+  // Square ledger state (3.15b) — filter chips + which block (if any) has its
+  // edit panel open below the grid. Both are page-level since LedgerControls
+  // and StatementLedger are siblings that need to share them.
+  const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("ALL");
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
 
   // Entity fields the new "Grid of Record" regions need (facts strip, attestation
   // bar) that useProfileStore doesn't carry — kept local to this page rather than
@@ -614,22 +913,55 @@ export default function ProfilePage() {
           </div>
         ) : (
           <>
-            {/* Regions 1-4 ("Grid of Record", 3.15a) — nav (AppHeader above),
-                attestation bar, identity + mode switch, facts strip. Shared
-                across all three modes; only what's below differs (3.15b-f). */}
+            {/* Regions 1-6 ("Grid of Record") — nav (AppHeader above),
+                attestation bar, identity + mode switch, facts strip (3.15a),
+                ledger controls + square ledger (3.15b). Shared across all
+                three modes — region 6 shows in Edit/Visitor/Agent alike per
+                spec, only the add-tile/drag are edit-only. What's left below
+                (verification tiles, modal, visitor footer/agent panel,
+                mobile) is 3.15c-f. */}
             <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}`, marginBottom: 26 }}>
               <AttestationBar mobile={m} updatedAt={entityMeta.updatedAt} />
               <ProfileIdentity mobile={m} slug={slug} />
               <FactsStrip mobile={m} verificationLevel={entityMeta.verificationLevel} createdAt={entityMeta.createdAt} />
+              <LedgerControls
+                mobile={m}
+                filter={ledgerFilter}
+                setFilter={setLedgerFilter}
+                isEdit={store.view === "edit"}
+                businessId={store.businessId}
+                entityName={store.companyName}
+                total={store.blocks.length}
+              />
+              <StatementLedger
+                mobile={m}
+                filter={ledgerFilter}
+                isEdit={store.view === "edit"}
+                editingBlockId={editingBlockId}
+                setEditingBlockId={setEditingBlockId}
+              />
+              {/* Bridge until 3.15d's real detail modal: editing a block's
+                  title/description/media happens here, below the grid,
+                  rather than regressing that functionality this session. */}
+              {store.view === "edit" && editingBlockId && (
+                <div style={{ borderTop: `1px solid ${GR_BORDER}`, padding: "22px 34px 26px" }}>
+                  <BlockEditPanel
+                    key={editingBlockId}
+                    block={store.blocks.find((b) => b.id === editingBlockId) ?? null}
+                    mobile={m}
+                    onClose={() => setEditingBlockId(null)}
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Regions 5+ — still 3.13's shipped UI until 3.15b-f land. */}
+            {/* Regions 5a/7/8 — still 3.13's shipped UI until 3.15c/e land. */}
             <div style={{ maxWidth: 880, margin: "0 auto" }}>
               {published && slug && <SharePageButton slug={slug} mobile={m} />}
 
-              {/* Remount on entity switch: VerifyMenu/BlockCard keep their own
-                  useState (registryStatus, emailDone, linked, isPublished…) that
-                  has no other trigger to clear when businessId changes (QA #18). */}
+              {/* Remount on entity switch: VerifyMenu keeps its own useState
+                  (registryStatus, emailDone, linked, isPublished…) that has
+                  no other trigger to clear when businessId changes (QA #18). */}
               {store.view === "edit" && <EditView key={store.businessId ?? "new"} mobile={m} />}
               {store.view === "visitor" && <VisitorView mobile={m} />}
               {store.view === "agent" && <AgentView mobile={m} />}
@@ -748,130 +1080,15 @@ function SharePageButton({ slug, mobile: m }: { slug: string; mobile: boolean })
 function EditView({ mobile: m }: { mobile: boolean }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
-
   const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
-  // Persist the new block up front so it has a real id (needed for media upload).
-  const handleAddBlock = async () => {
-    if (store.businessId && token) {
-      try {
-        const created = await blockApi.add(store.businessId, "", undefined, token, store.blocks.length);
-        store.addBlock(mapServerBlock(created));
-        return;
-      } catch {
-        // fall through to a local-only block if the API is unreachable
-      }
-    }
-    store.addBlock();
-  };
-
+  // Name/description/status-row moved to ProfileIdentity/AttestationBar
+  // (3.15a); blocks moved to the shared LedgerControls/StatementLedger
+  // (3.15b) since region 6 shows in every mode, not just Edit. This view is
+  // now just the verification menu — 3.15c replaces it with the spec's 6-up
+  // action-tile row.
   return (
     <div>
-      {/* Name/description/status-row moved to the shared ProfileIdentity +
-          AttestationBar regions (3.15a) — this view is now just blocks + the
-          verification menu. */}
-
-      {/* Blocks — the primary object on the page (QA #29). */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 20,
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span
-            style={{
-              fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-              fontSize: 10.5,
-              letterSpacing: "1.4px",
-              textTransform: "uppercase",
-              color: "#9991AC",
-            }}
-          >
-            Your blocks
-          </span>
-          {store.blocks.length > 0 && (
-            <span
-              style={{
-                fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-                fontSize: 10.5,
-                color: "#9991AC",
-              }}
-            >
-              {store.blocks.length}
-            </span>
-          )}
-        </div>
-
-        {/* Connect Camera lives next to the blocks it feeds, not buried in
-            the verification menu (QA #30) — the capture→block relationship
-            is meant to be obvious at a glance. */}
-        <PiCamButton businessId={store.businessId} entityName={store.companyName} />
-      </div>
-
-      {/* Empty state */}
-      {store.blocks.length === 0 && (
-        <div
-          onClick={handleAddBlock}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            padding: "48px 24px",
-            border: "1.5px dashed rgba(26,16,53,0.15)",
-            borderRadius: 13,
-            cursor: "pointer",
-            color: "#9991AC",
-            fontSize: 14,
-            transition: "border-color 0.16s, background 0.16s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "rgba(91,69,201,0.02)";
-            (e.currentTarget as HTMLElement).style.borderColor = "rgba(91,69,201,0.3)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "transparent";
-            (e.currentTarget as HTMLElement).style.borderColor = "rgba(26,16,53,0.15)";
-          }}
-        >
-          <CameraIcon size={28} color="#9991AC" />
-          + Add your first block
-        </div>
-      )}
-
-      {/* Block cards */}
-      {store.blocks.map((block) => (
-        <BlockCard key={block.id} block={block} mobile={m} />
-      ))}
-
-      {store.blocks.length > 0 && (
-        <div
-          onClick={handleAddBlock}
-          style={{
-            marginTop: 16,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 13.5,
-            color: "#5B45C9",
-            cursor: "pointer",
-            fontWeight: 600,
-          }}
-        >
-          + Add block
-        </div>
-      )}
-
-      <div style={{ height: 1, background: "rgba(26,16,53,0.08)", margin: "32px 0 24px" }} />
-
-      {/* Compact icon menu — Registry Match, Email, Domain, Document Upload,
-          Legal Entity, Publish & Privacy (QA #28/#31). Secondary to blocks. */}
       <VerifyMenu businessId={store.businessId} token={token} mobile={m} entityKind={store.entityKind} />
     </div>
   );
@@ -1463,28 +1680,27 @@ function VerifyMenu({
 }
 
 // ===== Block Card =====
-function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean }) {
+// Content editor for one statement block — title/description/media upload.
+// Used to be BlockCard, always visible inline per-block in the old 3.13
+// free-form list; now it opens below the square ledger (StatementLedger)
+// when a tile is clicked in Edit mode, or after ADD BLOCK. The real
+// click-to-open detail modal (with fact grid, Verify chain action, etc.) is
+// 3.15d — this is the functional bridge until then, so title/description
+// editing and media upload don't regress while the ledger's visuals change.
+function BlockEditPanel({
+  block, mobile: m, onClose,
+}: {
+  block: ProfileBlock | null; mobile: boolean; onClose: () => void;
+}) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [editing, setEditing] = useState(!block.title); // new blocks start in edit mode
   const [uploadError, setUploadError] = useState<string | null>(null);
   const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
-  const removeBlock = () => {
-    clearTimeout(blockSaveTimers.get(block.id));
-    blockSaveTimers.delete(block.id);
-    if (isServerBlock(block.id) && token) blockApi.delete(block.id, token).catch(() => {});
-    store.removeBlock(block.id);
-  };
-
-  const accentColor =
-    block.media?.phase === "done"
-      ? block.media.source === "pi_camera" ? "#5B45C9" : "#F59A2E"
-      : "rgba(26,16,53,0.10)";
-
   const handleFileUpload = useCallback(
     async (source: "pi_camera" | "file", file?: File) => {
+      if (!block) return;
       setUploadError(null);
       store.setBlockMedia(block.id, { source, phase: source === "pi_camera" ? "signing" : "timestamping" });
 
@@ -1509,6 +1725,9 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
               original_hash: uploaded?.original_hash,
               c2pa_verified: uploaded?.c2pa_verified,
               bitcoin_confirmed: uploaded?.bitcoin_confirmed,
+              bitcoin_block: uploaded?.bitcoin_block,
+              type: uploaded?.type,
+              uploaded_at: uploaded?.uploaded_at,
             });
           } catch (e) {
             setUploadError(e instanceof Error ? e.message : "Upload failed");
@@ -1525,127 +1744,68 @@ function BlockCard({ block, mobile: m }: { block: ProfileBlock; mobile: boolean 
         source === "pi_camera" ? 850 : 400
       );
     },
-    [block.id, store, token]
+    [block, store, token]
   );
 
-  // Live reorder while dragging over this card; keys keep DOM nodes stable so
-  // the drag isn't cancelled when the list shuffles. Persist happens on drag end.
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    const { dragId, blocks } = useProfileStore.getState();
-    if (!dragId || dragId === block.id) return;
-    const from = blocks.findIndex((b) => b.id === dragId);
-    const to = blocks.findIndex((b) => b.id === block.id);
-    if (from === -1 || to === -1 || from === to) return;
-    store.reorderBlocks(from, to);
+  if (!block) return null;
+
+  const removeBlock = () => {
+    clearTimeout(blockSaveTimers.get(block.id));
+    blockSaveTimers.delete(block.id);
+    if (isServerBlock(block.id) && token) blockApi.delete(block.id, token).catch(() => {});
+    store.removeBlock(block.id);
+    onClose();
   };
 
-  const isDragging = store.dragId === block.id;
-
   return (
-    <div
-      onDragOver={handleDragOver}
-      onDrop={(e) => e.preventDefault()}
-      style={{
-        border: "1px solid rgba(255,255,255,0.7)",
-        borderLeft: `3px solid ${accentColor}`,
-        borderRadius: "0 13px 13px 0",
-        padding: "18px 20px 16px 18px",
-        marginBottom: 16,
-        background: "rgba(255,255,255,0.45)",
-        backdropFilter: "blur(12px) saturate(130%)",
-        WebkitBackdropFilter: "blur(12px) saturate(130%)",
-        boxShadow: "0 6px 20px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
-        opacity: isDragging ? 0.5 : 1,
-      }}
-    >
-      {/* Header row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editing ? 12 : 6 }}>
-        <span
-          draggable
-          onDragStart={() => {
-            dragSnapshot = useProfileStore.getState().blocks;
-            store.setDragId(block.id);
-          }}
-          onDragEnd={() => {
-            store.setDragId(null);
-            persistBlockOrder(token);
-          }}
-          style={{ color: "#D8D2E2", fontSize: 16, cursor: "grab" }}
-        >
-          ⠿
+    <div style={{ maxWidth: 520 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.4px", textTransform: "uppercase", color: GR_PRIMARY }}>
+          Editing block
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {!editing && (
-            <span
-              onClick={() => setEditing(true)}
-              style={{ fontSize: 12, color: "#9991AC", cursor: "pointer", padding: "3px 8px", border: "1px solid rgba(26,16,53,0.12)", borderRadius: 6 }}
-            >
-              Edit
-            </span>
-          )}
-          {editing && (
-            <span
-              onClick={() => setEditing(false)}
-              style={{ fontSize: 12, color: "#5B45C9", cursor: "pointer", fontWeight: 600, padding: "3px 8px", border: "1px solid rgba(91,69,201,0.35)", borderRadius: 6, background: "rgba(91,69,201,0.06)" }}
-            >
-              Done
-            </span>
-          )}
-          <span onClick={removeBlock} style={{ color: "#9991AC", cursor: "pointer", fontSize: 16 }}>×</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span onClick={removeBlock} style={{ fontSize: 12.5, color: GR_MUTED, cursor: "pointer" }}>
+            Remove
+          </span>
+          <span onClick={onClose} style={{ fontSize: 12.5, color: GR_PRIMARY, fontWeight: 600, cursor: "pointer" }}>
+            Done
+          </span>
         </div>
       </div>
 
-      {editing ? (
-        <>
-          <input
-            value={block.title}
-            onChange={(e) => { store.updateBlock(block.id, { title: e.target.value }); scheduleBlockSave(block.id, token); }}
-            placeholder="Block title"
-            autoFocus
-            style={{ width: "100%", fontSize: m ? 18 : 21, fontWeight: 600, color: "#1A1035", border: "none", background: "transparent", fontFamily: "inherit", marginBottom: 8 }}
-          />
-          <textarea
-            value={block.desc}
-            onChange={(e) => { store.updateBlock(block.id, { desc: e.target.value }); scheduleBlockSave(block.id, token); }}
-            placeholder="Describe what this block shows…"
-            rows={2}
-            style={{ width: "100%", fontSize: 15, fontWeight: 300, color: "#5A4F78", border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", lineHeight: 1.55, marginBottom: 16 }}
-          />
-          {!block.media ? (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 16px", border: "1px dashed rgba(26,16,53,0.14)", borderRadius: 9, flexWrap: "wrap" }}>
-                <CameraIcon size={22} color="#9991AC" />
-                <button
-                  onClick={() => handleFileUpload("pi_camera")}
-                  style={{ padding: "9px 16px", border: "1px solid rgba(91,69,201,0.3)", borderRadius: 9, background: "rgba(91,69,201,0.06)", color: "#5B45C9", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  Upload from PI Camera
-                </button>
-                <span onClick={() => fileRef.current?.click()} style={{ fontSize: 13, color: "#9991AC", cursor: "pointer" }}>
-                  or upload a file
-                </span>
-                <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload("file", f); }} />
-              </div>
-              {uploadError && <div style={{ fontSize: 12, color: "#F59A2E", marginTop: 6 }}>{uploadError}</div>}
-            </div>
-          ) : (
-            <MediaDisplay block={block} onReplace={() => store.setBlockMedia(block.id, null)} />
-          )}
-        </>
-      ) : (
-        /* Collapsed view */
+      <input
+        value={block.title}
+        onChange={(e) => { store.updateBlock(block.id, { title: e.target.value }); scheduleBlockSave(block.id, token); }}
+        placeholder="Block title"
+        autoFocus
+        style={{ width: "100%", fontSize: m ? 18 : 21, fontWeight: 600, color: GR_INK, border: "none", background: "transparent", fontFamily: "inherit", marginBottom: 8 }}
+      />
+      <textarea
+        value={block.desc}
+        onChange={(e) => { store.updateBlock(block.id, { desc: e.target.value }); scheduleBlockSave(block.id, token); }}
+        placeholder="Describe what this block shows…"
+        rows={2}
+        style={{ width: "100%", fontSize: 15, fontWeight: 300, color: GR_BODY, border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", lineHeight: 1.55, marginBottom: 16 }}
+      />
+      {!block.media ? (
         <div>
-          <div style={{ fontSize: m ? 17 : 19, fontWeight: 600, color: "#1A1035", marginBottom: block.desc ? 4 : 0 }}>
-            {block.title || <span style={{ color: "#D8D2E2" }}>Untitled block</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 16px", border: `1px dashed ${GR_LILAC}`, flexWrap: "wrap" }}>
+            <CameraIcon size={22} color={GR_MUTED} />
+            <button
+              onClick={() => handleFileUpload("pi_camera")}
+              style={{ padding: "9px 16px", border: `1px solid ${GR_PRIMARY}`, background: GR_TINT, color: GR_PRIMARY, fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Upload from PI Camera
+            </button>
+            <span onClick={() => fileRef.current?.click()} style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}>
+              or upload a file
+            </span>
+            <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload("file", f); }} />
           </div>
-          {block.desc && (
-            <div style={{ fontSize: 14, color: "#5A4F78", lineHeight: 1.5, marginBottom: block.media ? 10 : 0 }}>
-              {block.desc}
-            </div>
-          )}
-          {block.media && <MediaDisplay block={block} onReplace={() => { store.setBlockMedia(block.id, null); setEditing(true); }} />}
+          {uploadError && <div style={{ fontSize: 12, color: GR_ORANGE, marginTop: 6 }}>{uploadError}</div>}
         </div>
+      ) : (
+        <MediaDisplay block={block} onReplace={() => store.setBlockMedia(block.id, null)} />
       )}
     </div>
   );
@@ -2098,66 +2258,11 @@ function PiCamModal({
 
 // ===== Visitor View =====
 function VisitorView({ mobile: m }: { mobile: boolean }) {
-  const store = useProfileStore();
-
-  // Name/verification-badges/description now come from the shared
-  // ProfileIdentity + AttestationBar regions above (3.15a) — this view is
-  // just the block list.
-  return (
-    <div>
-      {store.blocks.map((block) => (
-        <div
-          key={block.id}
-          style={{
-            borderLeft: `3px solid ${
-              block.media?.phase === "done"
-                ? block.media.source === "pi_camera"
-                  ? "#5B45C9"
-                  : "#F59A2E"
-                : "rgba(26,16,53,0.10)"
-            }`,
-            borderRadius: "0 11px 11px 0",
-            padding: "18px 18px 16px",
-            marginBottom: 16,
-            border: "1px solid rgba(26,16,53,0.07)",
-          }}
-        >
-          <div style={{ fontSize: 19, fontWeight: 600, marginBottom: 6 }}>
-            {block.title || "Untitled block"}
-          </div>
-          <div style={{ fontSize: 14.5, color: "#5A4F78", lineHeight: 1.5 }}>
-            {block.desc || "—"}
-          </div>
-          {block.media?.phase === "done" && (
-            <div
-              style={{
-                height: 80,
-                marginTop: 12,
-                borderRadius: 9,
-                background:
-                  "repeating-linear-gradient(135deg, rgba(91,69,201,0.04) 0px, rgba(91,69,201,0.04) 8px, transparent 8px, transparent 16px)",
-                border: "1px solid rgba(26,16,53,0.06)",
-              }}
-            />
-          )}
-          {block.media?.phase === "done" && (
-            <div
-              style={{
-                fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-                fontSize: 11,
-                color: "#9991AC",
-                marginTop: 8,
-              }}
-            >
-              {block.media.source === "pi_camera"
-                ? "#c2pa:verified · btc:ts:confirmed"
-                : "#btc:ts:confirmed"}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
+  // Name/description/badges (3.15a) and the block list itself (3.15b, shown
+  // in every mode now, not duplicated per-view) both live in the shared
+  // regions above. The trust-sentence footer + CTAs (region 7) are 3.15e —
+  // this view is an intentional no-op stub until then.
+  return null;
 }
 
 // ===== Agent View =====
