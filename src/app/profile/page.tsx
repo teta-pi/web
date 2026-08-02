@@ -186,6 +186,18 @@ function blockMarks(block: ProfileBlock): Array<"c2pa" | "btc"> {
   return marks;
 }
 
+// Shared between the tile's hover overlay and the block detail modal (3.15d)
+// — one source of truth for the signature/media-label strings both render.
+function blockHashLabel(block: ProfileBlock): string {
+  return block.media?.original_hash
+    ? `sha256:${block.media.original_hash.slice(0, 10)}…${block.media.original_hash.slice(-6)}`
+    : "no signature yet";
+}
+
+function blockMediaLabel(kind: LedgerKind): string {
+  return kind === "VIDEO" ? "video source" : kind === "PHOTO" ? "photo source" : kind === "FILE" ? "file source" : "plain text · no media";
+}
+
 // ===== Region 2: Attestation bar =====
 // Full-width bar above identity — three seals (registry/c2pa/btc) derived
 // from the entity's real registry/block data, never hardcoded, plus a status
@@ -488,13 +500,13 @@ function FactsStrip({
 // a hover provenance overlay, matching the spec exactly. Draggable only in
 // Edit mode (persists via the same blockApi.reorder/persistBlockOrder the old
 // 3.13 BlockCard already used — that endpoint already exists, see changelog).
-// Clicking a tile in Edit mode opens BlockEditPanel below the grid — the real
-// click-to-open-modal interaction is 3.15d; this is the bridge until then so
-// title/description editing and media upload don't regress in the meantime.
+// Clicking a tile opens the block detail modal (3.15d) in every mode — Edit's
+// old direct-to-BlockEditPanel bridge is gone; the panel is now reached one
+// click deeper, via the modal's "Replace media" action (see BlockDetailModal).
 function StatementTile({
-  block, index, isEdit, onEditClick,
+  block, index, isEdit, onOpen,
 }: {
-  block: ProfileBlock; index: number; isEdit: boolean; onEditClick: () => void;
+  block: ProfileBlock; index: number; isEdit: boolean; onOpen: () => void;
 }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
@@ -513,11 +525,7 @@ function StatementTile({
   // a dense grid), photo shows the real upload when it resolves.
   const showRealImage = kind === "PHOTO" && !!resolvedUrl && !imgError;
 
-  const mediaLabel =
-    kind === "VIDEO" ? "video source" :
-    kind === "PHOTO" ? "photo source" :
-    kind === "FILE" ? "file source" :
-    "plain text · no media";
+  const mediaLabel = blockMediaLabel(kind);
   const mediaLabelColor = dark ? GR_LILAC : GR_MUTED;
 
   // Real per-block marks max out at 2 (c2pa + btc — no per-block registry
@@ -525,9 +533,7 @@ function StatementTile({
   const sealState = marks.length === 2 ? "full chain" : marks.length === 1 ? "partial" : "unsigned";
   const sealColor = marks.length === 2 ? GR_PRIMARY : marks.length === 1 ? GR_ORANGE : GR_MUTED;
 
-  const hashLabel = block.media?.original_hash
-    ? `sha256:${block.media.original_hash.slice(0, 10)}…${block.media.original_hash.slice(-6)}`
-    : "no signature yet";
+  const hashLabel = blockHashLabel(block);
   const dateLabel = formatTileDate(block.media?.uploaded_at ?? block.createdAt);
 
   return (
@@ -555,10 +561,10 @@ function StatementTile({
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      onClick={() => { if (isEdit) onEditClick(); }}
+      onClick={onOpen}
       style={{
         position: "relative", aspectRatio: "1", border: `1px solid ${hover ? GR_PRIMARY : GR_BORDER}`,
-        background: "#fff", cursor: isEdit ? "grab" : "default",
+        background: "#fff", cursor: isEdit ? "grab" : "pointer",
         opacity: isDragging ? 0.3 : 1, display: "flex", flexDirection: "column", overflow: "hidden",
       }}
     >
@@ -645,9 +651,7 @@ function LedgerControls({
   businessId: string | null; entityName: string; total: number;
 }) {
   const filters: LedgerFilter[] = ["ALL", "VIDEO", "PHOTO", "TEXT", "FILE"];
-  // "click to inspect" (the block detail modal) isn't wired yet — 3.15d — so
-  // the hint only claims what's actually true this session.
-  const hint = isEdit ? "drag a square to reorder · click to edit" : "";
+  const hint = isEdit ? "drag a square to reorder · click to inspect" : "click a square to inspect";
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, padding: "22px 34px 15px", flexWrap: "wrap" }}>
@@ -686,10 +690,10 @@ function LedgerControls({
 
 // ===== Region 6: Square ledger grid =====
 function StatementLedger({
-  mobile: m, filter, isEdit, editingBlockId, setEditingBlockId,
+  mobile: m, filter, isEdit, setEditingBlockId, onOpenBlock,
 }: {
   mobile: boolean; filter: LedgerFilter; isEdit: boolean;
-  editingBlockId: string | null; setEditingBlockId: (id: string | null) => void;
+  setEditingBlockId: (id: string | null) => void; onOpenBlock: (id: string) => void;
 }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
@@ -728,7 +732,7 @@ function StatementLedger({
           block={block}
           index={index}
           isEdit={isEdit}
-          onEditClick={() => setEditingBlockId(editingBlockId === block.id ? null : block.id)}
+          onOpen={() => onOpenBlock(block.id)}
         />
       ))}
       {isEdit && <AddBlockTile onAdd={handleAddBlock} />}
@@ -737,6 +741,128 @@ function StatementLedger({
           No statements yet.
         </div>
       )}
+    </div>
+  );
+}
+
+// ===== Block detail modal (3.15d) =====
+// Opens on tile click in every mode (Edit/Visitor/Agent) — same data, same
+// component, no per-mode variant. Read-only fact grid over the real
+// media_url/content_hash/c2pa_verified/bitcoin_confirmed fields 1.20-web
+// already wired; this is new UI over existing data, not a new data source.
+// "Replace media" (Edit only) hands off to BlockEditPanel — the upload flow
+// that already exists there (3.15b) — rather than re-implementing upload
+// inside the modal. "Verify chain" has no backend endpoint for a manual
+// re-check yet (see docs/known-issues.md), so it mirrors the design
+// prototype's own stub behavior (closes the modal) and says so beneath the
+// buttons instead of pretending to call something real.
+function BlockDetailModal({
+  block, index, isEdit, onClose, onReplaceMedia,
+}: {
+  block: ProfileBlock; index: number; isEdit: boolean; onClose: () => void; onReplaceMedia: () => void;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const kind = blockKind(block);
+  const marks = blockMarks(block);
+  const dark = kind === "VIDEO";
+  const resolvedUrl = block.media?.storage_url ? mediaUrl(block.media.storage_url) : null;
+  const showRealImage = kind === "PHOTO" && !!resolvedUrl && !imgError;
+  const dateLabel = formatTileDate(block.media?.uploaded_at ?? block.createdAt);
+
+  const rows: Array<{ k: string; v: string }> = [
+    { k: "type", v: kind.toLowerCase() },
+    { k: "signature", v: blockHashLabel(block) },
+    { k: "captured", v: dateLabel },
+    { k: "attestations", v: marks.length ? marks.join(" · ") : "none yet" },
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 90, background: "rgba(26,16,53,0.55)",
+        backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 40,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 600, maxWidth: "100%", background: "#fff", border: `1px solid ${GR_LILAC}` }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 22px", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
+          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.4px", textTransform: "uppercase", color: GR_PRIMARY }}>
+            Block {String(index + 1).padStart(2, "0")} · {kind}
+          </span>
+          <span onClick={onClose} style={{ fontSize: 18, color: GR_MUTED, cursor: "pointer", lineHeight: 1 }}>×</span>
+        </div>
+
+        <div style={{ padding: "24px 22px 26px" }}>
+          <div
+            style={{
+              height: 190, border: `1px solid ${GR_BORDER}`, background: dark ? GR_INKSTRIPE : GR_STRIPE,
+              display: "flex", alignItems: "flex-end", justifyContent: showRealImage ? undefined : "flex-start",
+              padding: 12, overflow: "hidden", position: "relative",
+            }}
+          >
+            {showRealImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={resolvedUrl!}
+                alt=""
+                onError={() => setImgError(true)}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: dark ? GR_LILAC : GR_MUTED }}>
+                {blockMediaLabel(kind)}
+              </span>
+            )}
+          </div>
+
+          <h2 style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.6px", margin: "20px 0 0", lineHeight: 1.25, color: GR_INK }}>
+            {block.title || "Untitled block"}
+          </h2>
+          <div style={{ fontSize: 14.5, color: GR_BODY, lineHeight: 1.6, marginTop: 10 }}>
+            {block.desc || "No description yet."}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 1, background: GR_BORDER, border: `1px solid ${GR_BORDER}`, marginTop: 22 }}>
+            {rows.map((r) => (
+              <div key={r.k} style={{ background: "#fff", padding: "13px 15px" }}>
+                <div style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, letterSpacing: "1.2px", textTransform: "uppercase", color: GR_MUTED }}>
+                  {r.k}
+                </div>
+                <div style={{ fontFamily: GR_MONO_FONT, fontSize: 12, color: GR_INK, marginTop: 6, wordBreak: "break-all" }}>
+                  {r.v}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 12, marginTop: 22, flexWrap: "wrap" }}>
+            <span
+              onClick={onClose}
+              style={{ fontSize: 14, fontWeight: 600, color: "#fff", background: GR_PRIMARY, padding: "11px 20px", borderRadius: 4, cursor: "pointer" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
+            >
+              Verify chain
+            </span>
+            {isEdit && (
+              <span
+                onClick={onReplaceMedia}
+                style={{ fontSize: 14, fontWeight: 600, color: GR_PRIMARY, border: `1px solid ${GR_LILAC}`, padding: "11px 20px", borderRadius: 4, cursor: "pointer" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = GR_PRIMARY; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = GR_LILAC; }}
+              >
+                Replace media
+              </span>
+            )}
+          </div>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, marginTop: 12, lineHeight: 1.5 }}>
+            Verify chain re-runs the same hourly automatic check — a manual trigger isn&apos;t wired to a backend endpoint yet.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -757,6 +883,9 @@ export default function ProfilePage() {
   // and StatementLedger are siblings that need to share them.
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("ALL");
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  // Which block (if any) has its detail modal open (3.15d) — page-level since
+  // the modal itself renders outside the ledger, at the top of this component.
+  const [openBlockId, setOpenBlockId] = useState<string | null>(null);
 
   // Entity fields the new "Grid of Record" regions need (facts strip, attestation
   // bar) that useProfileStore doesn't carry — kept local to this page rather than
@@ -918,10 +1047,10 @@ export default function ProfilePage() {
                 attestation bar, identity + mode switch, facts strip (3.15a),
                 verification & publishing tiles (3.15c, Edit mode only, region
                 5a — sits between facts strip and ledger controls per spec
-                order), ledger controls + square ledger (3.15b). Regions 1-4/6
-                shared across all three modes; 5a is Edit-only. What's left
-                below (detail modal, visitor footer/agent panel, mobile) is
-                3.15d-f. */}
+                order), ledger controls + square ledger (3.15b) + the block
+                detail modal (3.15d). Regions 1-4/6 shared across all three
+                modes; 5a is Edit-only. What's left below (visitor
+                footer/agent panel, mobile) is 3.15e-f. */}
             <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}`, marginBottom: 26 }}>
               <AttestationBar mobile={m} updatedAt={entityMeta.updatedAt} />
               <ProfileIdentity mobile={m} slug={slug} />
@@ -951,12 +1080,13 @@ export default function ProfilePage() {
                 mobile={m}
                 filter={ledgerFilter}
                 isEdit={store.view === "edit"}
-                editingBlockId={editingBlockId}
                 setEditingBlockId={setEditingBlockId}
+                onOpenBlock={setOpenBlockId}
               />
-              {/* Bridge until 3.15d's real detail modal: editing a block's
-                  title/description/media happens here, below the grid,
-                  rather than regressing that functionality this session. */}
+              {/* Title/description editing + media upload for one block, opened
+                  either from ADD BLOCK or from the detail modal's "Replace
+                  media" action (never directly from a tile click anymore —
+                  that opens the read-only modal in every mode, see below). */}
               {store.view === "edit" && editingBlockId && (
                 <div style={{ borderTop: `1px solid ${GR_BORDER}`, padding: "22px 34px 26px" }}>
                   <BlockEditPanel
@@ -968,6 +1098,27 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* Block detail modal (3.15d) — opens on tile click in every
+                mode; "Replace media" hands off to BlockEditPanel above via
+                the same editingBlockId state ADD BLOCK already uses. */}
+            {openBlockId && (() => {
+              const openIndex = store.blocks.findIndex((b) => b.id === openBlockId);
+              const openBlock = openIndex >= 0 ? store.blocks[openIndex] : null;
+              if (!openBlock) return null;
+              return (
+                <BlockDetailModal
+                  block={openBlock}
+                  index={openIndex}
+                  isEdit={store.view === "edit"}
+                  onClose={() => setOpenBlockId(null)}
+                  onReplaceMedia={() => {
+                    setOpenBlockId(null);
+                    setEditingBlockId(openBlock.id);
+                  }}
+                />
+              );
+            })()}
 
             {/* Regions 7/8 — still 3.13's shipped UI until 3.15e lands. */}
             <div style={{ maxWidth: 880, margin: "0 auto" }}>
