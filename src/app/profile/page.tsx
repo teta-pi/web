@@ -1043,14 +1043,16 @@ export default function ProfilePage() {
           </div>
         ) : (
           <>
-            {/* Regions 1-6 ("Grid of Record") — nav (AppHeader above),
+            {/* Regions 1-8 ("Grid of Record") — nav (AppHeader above),
                 attestation bar, identity + mode switch, facts strip (3.15a),
                 verification & publishing tiles (3.15c, Edit mode only, region
                 5a — sits between facts strip and ledger controls per spec
                 order), ledger controls + square ledger (3.15b) + the block
-                detail modal (3.15d). Regions 1-4/6 shared across all three
-                modes; 5a is Edit-only. What's left below (visitor
-                footer/agent panel, mobile) is 3.15e-f. */}
+                detail modal (3.15d), visitor footer / agent panel (3.15e,
+                regions 7/8, mutually exclusive, Visitor/Agent-only). Regions
+                1-4/6 shared across all three modes; 5a is Edit-only; 7/8
+                never show together and never show in Edit. Only the 390px
+                mobile layout (3.15f) is still open. */}
             <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}`, marginBottom: 26 }}>
               <AttestationBar mobile={m} updatedAt={entityMeta.updatedAt} />
               <ProfileIdentity mobile={m} slug={slug} />
@@ -1097,6 +1099,23 @@ export default function ProfilePage() {
                   />
                 </div>
               )}
+
+              {/* Regions 7/8 (3.15e) — replace each other, neither shows in
+                  Edit mode; both live inside the same bordered card as 1-6
+                  so the visitor footer / agent panel read as the bottom edge
+                  of one continuous ledger, not a separate block below it. */}
+              {store.view === "visitor" && (
+                <VisitorView
+                  mobile={m}
+                  onVerifyAll={() => {
+                    const first = store.blocks[0];
+                    if (first) setOpenBlockId(first.id);
+                  }}
+                />
+              )}
+              {store.view === "agent" && (
+                <AgentView mobile={m} slug={slug} verificationLevel={entityMeta.verificationLevel} />
+              )}
             </div>
 
             {/* Block detail modal (3.15d) — opens on tile click in every
@@ -1120,12 +1139,10 @@ export default function ProfilePage() {
               );
             })()}
 
-            {/* Regions 7/8 — still 3.13's shipped UI until 3.15e lands. */}
+            {/* Share button (3.13, unrelated to regions 7/8) — visitor footer
+                and agent panel now render inside the ledger card above. */}
             <div style={{ maxWidth: 880, margin: "0 auto" }}>
               {published && slug && <SharePageButton slug={slug} mobile={m} />}
-
-              {store.view === "visitor" && <VisitorView mobile={m} />}
-              {store.view === "agent" && <AgentView mobile={m} />}
             </div>
           </>
         )}
@@ -2413,129 +2430,133 @@ function PiCamModal({
   );
 }
 
-// ===== Visitor View =====
-function VisitorView({ mobile: m }: { mobile: boolean }) {
-  // Name/description/badges (3.15a) and the block list itself (3.15b, shown
-  // in every mode now, not duplicated per-view) both live in the shared
-  // regions above. The trust-sentence footer + CTAs (region 7) are 3.15e —
-  // this view is an intentional no-op stub until then.
-  return null;
-}
-
-// ===== Agent View =====
-function AgentView({ mobile: m }: { mobile: boolean }) {
+// ===== Region 7: Visitor footer =====
+// Trust sentence + two CTAs, Visitor mode only — replaces Edit's region 5a
+// (verification & publishing tiles) below the shared facts strip. "Contact
+// {name}" has no real channel to call: Business carries no email/phone field
+// anywhere in the schema (see docs/known-issues.md), so it's a documented
+// stub — same pattern 3.15d used for the block modal's "Verify chain" button
+// (cosmetic until a real flow exists). "Verify all blocks" is real: it opens
+// the first block's detail modal, the same per-block verification surface
+// every tile already exposes on click.
+function VisitorView({ mobile: m, onVerifyAll }: { mobile: boolean; onVerifyAll: () => void }) {
   const store = useProfileStore();
-  const isBusiness = store.entityKind === "business";
-
-  const trustLevel =
-    store.blocks.some((b) => b.media?.phase === "done" && b.media.source === "pi_camera")
-      ? "full"
-      : store.blocks.some((b) => b.media?.phase === "done")
-      ? "partial"
-      : isBusiness && store.registryStatus === "verified"
-      ? "registry"
-      : !isBusiness
-      ? "email_verified"
-      : "unverified";
-
-  const json = {
-    entity: {
-      id: store.businessId || "00000000-0000-0000-0000-000000000001",
-      type: store.entityKind || "business",
-      name: store.companyName || "Name",
-      description: store.description || null,
-    },
-    registry: isBusiness && store.registryStatus === "verified" && store.registryData
-      ? {
-          status: "verified",
-          registry: store.registryData.authority,
-          number: store.registryData.registryId,
-        }
-      : isBusiness ? null : { status: "self_asserted", method: "email" },
-    trust_level: trustLevel,
-    blocks: store.blocks.map((b) => ({
-      title: b.title || "Untitled",
-      description: b.desc || null,
-      media: b.media
-        ? [
-            {
-              type: "video",
-              c2pa_verified: b.media.source === "pi_camera" && b.media.phase === "done",
-              captured_at: new Date().toISOString(),
-              bitcoin_confirmed: b.media.phase === "done",
-            },
-          ]
-        : [],
-    })),
-  };
+  const [contactHover, setContactHover] = useState(false);
+  const [verifyHover, setVerifyHover] = useState(false);
+  const name = store.companyName || (isPersonKind(store.entityKind) ? "this page" : "this company");
 
   return (
-    <div>
-      <div
-        style={{
-          padding: "20px 22px",
-          border: "1px solid rgba(255,255,255,0.7)",
-          borderRadius: 13,
-          background: "rgba(255,255,255,0.45)",
-          backdropFilter: "blur(12px) saturate(130%)",
-          WebkitBackdropFilter: "blur(12px) saturate(130%)",
-          boxShadow: "0 6px 20px rgba(45,55,120,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
-          marginBottom: 20,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 16,
-            flexWrap: "wrap",
-            gap: 10,
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-              fontSize: 12.5,
-              color: "#5B45C9",
-              fontWeight: 600,
-            }}
-          >
-            GET /v1/entity/{store.businessId || "{slug}"}
-          </span>
-          <span
-            style={{
-              fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-              fontSize: 11.5,
-              color: "#9991AC",
-            }}
-          >
-            200 · application/json
-          </span>
-        </div>
-        <pre
-          style={{
-            fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-            fontSize: m ? 11 : 12.5,
-            color: "#3A2C5C",
-            lineHeight: 1.6,
-            margin: 0,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {JSON.stringify(json, null, 2)}
-        </pre>
+    <div
+      style={{
+        display: "flex", flexDirection: m ? "column" : "row", alignItems: m ? "flex-start" : "center",
+        justifyContent: "space-between", gap: 20, borderTop: `1px solid ${GR_BORDER}`,
+        background: GR_RAISED, padding: m ? "20px 20px 22px" : "22px 34px 24px",
+      }}
+    >
+      <div style={{ fontSize: 14.5, color: GR_BODY, lineHeight: 1.55, maxWidth: 620 }}>
+        Nothing on {name}&rsquo;s page is self-reported. Each square carries its own signature chain — open one to check it yourself.
       </div>
-      <div
-        style={{
-          fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
-          fontSize: 11,
-          color: "#9991AC",
-          letterSpacing: "0.3px",
-        }}
-      >
-        Agents read this structured, signed record — never the layout.
+      <div style={{ display: "flex", gap: 12, flexShrink: 0 }}>
+        <span
+          onMouseEnter={() => setContactHover(true)}
+          onMouseLeave={() => setContactHover(false)}
+          title="No contact channel published for this entity yet"
+          style={{
+            fontSize: 14, fontWeight: 600, color: "#fff", borderRadius: 4, padding: "11px 20px",
+            background: contactHover ? GR_PRIMARY_HOVER : GR_PRIMARY, cursor: "default",
+          }}
+        >
+          Contact {store.companyName || (isPersonKind(store.entityKind) ? "page owner" : "company")}
+        </span>
+        <span
+          onClick={onVerifyAll}
+          onMouseEnter={() => setVerifyHover(true)}
+          onMouseLeave={() => setVerifyHover(false)}
+          style={{
+            fontSize: 14, fontWeight: 600, color: GR_PRIMARY, borderRadius: 4, padding: "11px 20px",
+            border: `1px solid ${verifyHover ? GR_PRIMARY : GR_LILAC}`, cursor: "pointer",
+          }}
+        >
+          Verify all blocks
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ===== Region 8: Agent panel =====
+// Literal render of the machine-readable record — same seven fields the
+// design spec lists (entity/registry/c2pa/btc_ts/blocks/trust/fetch; "claims"
+// is dropped, nothing in AgentBusinessProfile or Business backs it — see
+// docs/known-issues.md rather than inventing a certifications field). Values
+// are derived from store.blocks/registryStatus/registryData exactly like the
+// attestation bar (region 2) does — never hardcoded. A REST equivalent of
+// this payload already exists (businessApi.agentPreview, unauthenticated GET
+// /businesses/{id}/preview) but it just re-derives the same blocks/registry
+// data already sitting in the store from this page's own authenticated load,
+// so a second network round trip would add latency without adding real data.
+function AgentView({
+  mobile: m, slug, verificationLevel,
+}: { mobile: boolean; slug: string | null; verificationLevel: VerificationLevel | null }) {
+  const store = useProfileStore();
+  const isPerson = isPersonKind(store.entityKind);
+  const total = store.blocks.length;
+
+  const registryValue = isPerson
+    ? "n/a"
+    : store.registryStatus === "verified" && store.registryData
+    ? `${store.registryData.iso} · ${store.registryData.authority} ${store.registryData.registryId}`.trim()
+    : "unverified";
+  const registryState = isPerson ? "not applicable" : store.registryStatus ?? "unverified";
+  const registryVerified = !isPerson && store.registryStatus === "verified";
+
+  const signed = store.blocks.filter((b) => b.media?.c2pa_verified).length;
+  const c2paValue = total > 0 ? `${signed} of ${total} blocks signed` : "no blocks yet";
+  const c2paVerified = signed > 0;
+
+  const btcBlocks = store.blocks.filter((b) => b.media?.bitcoin_confirmed);
+  const latestBtc = btcBlocks.find((b) => b.media?.bitcoin_block)?.media?.bitcoin_block ?? null;
+  const btcValue = btcBlocks.length > 0
+    ? (latestBtc ? `block ${latestBtc.toLocaleString()}` : `${btcBlocks.length} confirmed`)
+    : total > 0 ? "awaiting confirmation" : "no blocks yet";
+  const btcVerified = btcBlocks.length > 0;
+
+  const kindCounts = store.blocks.reduce<Record<LedgerKind, number>>((acc, b) => {
+    const k = blockKind(b);
+    acc[k] = (acc[k] ?? 0) + 1;
+    return acc;
+  }, { VIDEO: 0, PHOTO: 0, TEXT: 0, FILE: 0 });
+  const kindSummary = (["VIDEO", "PHOTO", "TEXT", "FILE"] as LedgerKind[])
+    .filter((k) => kindCounts[k] > 0)
+    .map((k) => `${k.toLowerCase()}:${kindCounts[k]}`)
+    .join(" ");
+
+  const rows: Array<{ key: string; value: string; state: string | null; verified: boolean }> = [
+    { key: "entity", value: slug || store.companyName || "—", state: null, verified: false },
+    { key: "registry", value: registryValue, state: registryState, verified: registryVerified },
+    { key: "c2pa", value: c2paValue, state: c2paVerified ? "verified" : "unverified", verified: c2paVerified },
+    { key: "btc_ts", value: btcValue, state: btcVerified ? "confirmed" : "unconfirmed", verified: btcVerified },
+    { key: "blocks", value: total > 0 ? `${total}${kindSummary ? `  [${kindSummary}]` : ""}` : "0", state: null, verified: false },
+    { key: "trust", value: `level ${trustOrdinal(verificationLevel)} — ${verificationLevel ?? "none"}`, state: null, verified: false },
+    { key: "fetch", value: "tetapi.get_block(id) → signed media + chain", state: null, verified: false },
+  ];
+
+  return (
+    <div style={{ background: "#1A1035", padding: m ? "20px 20px 24px" : "26px 34px 30px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18 }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: GR_PRIMARY }} />
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, color: GR_MUTED, letterSpacing: "0.8px" }}>
+          mcp · tetapi.get_entity(&quot;{slug || store.companyName || "…"}&quot;) → response
+        </span>
+      </div>
+      <div style={{ fontFamily: GR_MONO_FONT, fontSize: m ? 11.5 : 12.5, lineHeight: 1.8, overflowX: "auto" }}>
+        {rows.map((r) => (
+          <div key={r.key} style={{ display: "flex", flexWrap: "wrap", columnGap: 8 }}>
+            <span style={{ color: GR_MUTED, minWidth: m ? undefined : 90 }}>{r.key}:</span>
+            <span style={{ color: "#ffffff" }}>{r.value}</span>
+            {r.state && <span style={{ color: r.verified ? GR_ORANGE : GR_MUTED }}>{r.state}</span>}
+          </div>
+        ))}
       </div>
     </div>
   );
