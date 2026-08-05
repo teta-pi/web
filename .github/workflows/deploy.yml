@@ -57,7 +57,12 @@ jobs:
           rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
             .next/server/ root@164.90.235.66:/opt/tetapi/web/web/.next/server/
 
-      # ⚠ Add new top-level pages/routes to app-paths-manifest.json below.
+      # app-paths-manifest.json is no longer hardcoded here (3.17) — the
+      # "Sync Next.js standalone" step above already rsyncs the real one
+      # `next build` generated into .next/server/, so every route it emits
+      # (including brand new ones) reaches the server with zero manual
+      # upkeep. See docs/known-issues.md for the two silent-404 incidents
+      # (3.12, 1.20-web) this replaced.
       - name: Patch standalone output + restart
         run: |
           ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 bash << 'REMOTE'
@@ -70,24 +75,6 @@ jobs:
 
           BUILD_ID=$(head -c 40 "$NEXT/BUILD_ID" | tr -d '\n')
           printf '%s' "$BUILD_ID" > "$NEXT/BUILD_ID"
-
-          cat > "$NEXT/server/app-paths-manifest.json" << 'JSON'
-          {
-            "/page": "app/page.js",
-            "/profile/page": "app/profile/page.js",
-            "/claim/page": "app/claim/page.js",
-            "/admin/page": "app/admin/page.js",
-            "/settings/page": "app/settings/page.js",
-            "/login/page": "app/login/page.js",
-            "/e/[slug]/page": "app/e/[slug]/page.js",
-            "/e/[slug]/blocks/[blockId]/page": "app/e/[slug]/blocks/[blockId]/page.js",
-            "/search/page": "app/search/page.js",
-            "/.well-known/agent.json/route": "app/.well-known/agent.json/route.js",
-            "/icon.svg/route": "app/icon.svg/route.js",
-            "/apple-icon.png/route": "app/apple-icon.png/route.js",
-            "/_not-found/page": "app/_not-found/page.js"
-          }
-          JSON
 
           systemctl restart tetapi-web
           sleep 4
