@@ -20,6 +20,12 @@ import { devices, authApi, blockApi, businessApi, verifyApi, publicProfileApi, m
 import type { DomainVerifyInstructions, PublicLegalEntity } from "@/lib/api";
 import type { Block, Business, EntityKind, VerificationLevel } from "@/lib/types";
 import { isPersonKind, normalizeEntityKind } from "@/lib/types";
+import {
+  GR_INK, GR_BODY, GR_MUTED, GR_PRIMARY, GR_PRIMARY_HOVER, GR_TINT, GR_LILAC, GR_ORANGE,
+  GR_BORDER, GR_RAISED, GR_MONO_FONT, GR_STRIPE, GR_INKSTRIPE,
+  mapServerBlock, blockKind, blockMarks, blockHashLabel, blockMediaLabel, formatTileDate,
+  SealGlyph, BlockDetailModal, type LedgerKind, type SealKind,
+} from "@/components/GridOfRecord";
 
 // Public entity pages live on the app subdomain. Shared links are always the
 // production URL — a localhost link would be useless to whoever receives it.
@@ -35,31 +41,6 @@ const isServerBlock = (id: string) => !id.startsWith("block-");
 // it updates the moment a user signs in) and falls back to the claim flow's
 // token for users who arrived that way instead — see ProfilePage, StatementTile,
 // BlockEditPanel, VerifyMenu and PiCamButton below.
-
-// Map a persisted block from the API onto the store's block shape.
-function mapServerBlock(b: Block): ProfileBlock {
-  const media = b.media?.[0];
-  return {
-    id: b.id,
-    title: b.title ?? "",
-    desc: b.description ?? "",
-    createdAt: b.created_at,
-    media: media
-      ? {
-          source: media.c2pa_verified ? "pi_camera" : "file",
-          phase: "done",
-          id: media.id,
-          storage_url: media.storage_url,
-          original_hash: media.original_hash,
-          c2pa_verified: media.c2pa_verified,
-          bitcoin_confirmed: media.bitcoin_confirmed,
-          bitcoin_block: media.bitcoin_block,
-          type: media.type,
-          uploaded_at: media.uploaded_at,
-        }
-      : null,
-  };
-}
 
 // Drag-to-reorder: snapshot the order captured at drag start so a failed save
 // can roll back. Only server-side blocks (real UUIDs) get persisted — unsaved
@@ -109,23 +90,8 @@ function useViewport() {
   return vw;
 }
 
-// ===== "Grid of Record" design tokens (3.15, docs/design/profile-grid-of-record) =====
-// Exact hex values from the owner's high-fidelity handoff — kept distinct from
-// the V_* constants below (VerifyMenu's older glass palette) since the two
-// visual languages coexist on this page until the redesign finishes (3.15b-f).
-const GR_INK = "#1A1035";
-const GR_BODY = "#4A3F6B";
-const GR_MUTED = "#9088B0";
-const GR_PRIMARY = "#6B3FA0";
-const GR_PRIMARY_HOVER = "#5A3488";
-const GR_TINT = "#F4F0FB";
-const GR_LILAC = "#C9B8E8";
-const GR_ORANGE = "#E8640C";
-const GR_BORDER = "#E2DCF0";
-const GR_RAISED = "#FBFAFD";
-const GR_MONO_FONT = "ui-monospace,'SF Mono',Menlo,monospace";
-const GR_STRIPE = "repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px)";
-const GR_INKSTRIPE = "repeating-linear-gradient(45deg,#241847 0 6px,#1A1035 6px 12px)";
+// "Grid of Record" design tokens (3.15) now live in @/components/GridOfRecord,
+// shared with the search results page (3.16b) — see the import above.
 
 // none < registry/email/domain < partial < full < live — used only to derive
 // the facts strip's compact "L{n}" trust stat from the real backend enum.
@@ -154,49 +120,15 @@ function formatRecheckTs(iso: string | null): string {
   return `${day} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} · ${hh}:${mm}Z`;
 }
 
-// Matches the spec's "12 JUN 2026" tile-meta format (no time component).
-function formatTileDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-  return `${String(d.getUTCDate()).padStart(2, "0")} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
-
 // ===== Regions 5-6: Ledger controls + square ledger =====
 // The real data model has no "audio" media type (MediaItem.type is only
 // video|photo|file) and no per-block registry association — both spec
 // concepts (filter chips include "audio"; a seal can include "registry")
 // don't map onto real data, so KIND drops audio in favor of the real "file"
 // bucket, and per-block marks are c2pa/btc only (see docs/changelog.md).
-type LedgerKind = "VIDEO" | "PHOTO" | "TEXT" | "FILE";
+// blockKind/blockMarks/blockHashLabel/blockMediaLabel/SealGlyph now live in
+// @/components/GridOfRecord, shared with the search results page (3.16b).
 type LedgerFilter = "ALL" | LedgerKind;
-
-function blockKind(block: ProfileBlock): LedgerKind {
-  if (!block.media) return "TEXT";
-  if (block.media.type === "video") return "VIDEO";
-  if (block.media.type === "photo") return "PHOTO";
-  return "FILE";
-}
-
-function blockMarks(block: ProfileBlock): Array<"c2pa" | "btc"> {
-  const marks: Array<"c2pa" | "btc"> = [];
-  if (block.media?.c2pa_verified) marks.push("c2pa");
-  if (block.media?.bitcoin_confirmed) marks.push("btc");
-  return marks;
-}
-
-// Shared between the tile's hover overlay and the block detail modal (3.15d)
-// — one source of truth for the signature/media-label strings both render.
-function blockHashLabel(block: ProfileBlock): string {
-  return block.media?.original_hash
-    ? `sha256:${block.media.original_hash.slice(0, 10)}…${block.media.original_hash.slice(-6)}`
-    : "no signature yet";
-}
-
-function blockMediaLabel(kind: LedgerKind): string {
-  return kind === "VIDEO" ? "video source" : kind === "PHOTO" ? "photo source" : kind === "FILE" ? "file source" : "plain text · no media";
-}
 
 // ===== Region 2: Attestation bar =====
 // Full-width bar above identity — three seals (registry/c2pa/btc) derived
@@ -204,24 +136,6 @@ function blockMediaLabel(kind: LedgerKind): string {
 // cell with the pulsing re-check dot. Region 2 is entirely new (no 3.13
 // equivalent); it supersedes the inline "✓ Verified in registry" status row
 // the old EditView used to render next to the name.
-type SealKind = "registry" | "c2pa" | "btc";
-
-function SealGlyph({ kind, verified, size = 14 }: { kind: SealKind; verified: boolean; size?: number }) {
-  const line = verified ? (kind === "btc" ? GR_ORANGE : GR_PRIMARY) : GR_MUTED;
-  const fill = kind === "c2pa" ? "transparent" : verified ? line : "transparent";
-  const radius = kind === "c2pa" ? "50%" : "1px";
-  const rot = kind === "btc" ? "45deg" : "0deg";
-  return (
-    <span
-      style={{
-        width: size, height: size, flexShrink: 0,
-        border: `1.5px solid ${line}`, background: fill,
-        borderRadius: radius, transform: `rotate(${rot})`,
-      }}
-    />
-  );
-}
-
 interface AttestationCell {
   key: string;
   kind: SealKind;
@@ -745,127 +659,10 @@ function StatementLedger({
   );
 }
 
-// ===== Block detail modal (3.15d) =====
-// Opens on tile click in every mode (Edit/Visitor/Agent) — same data, same
-// component, no per-mode variant. Read-only fact grid over the real
-// media_url/content_hash/c2pa_verified/bitcoin_confirmed fields 1.20-web
-// already wired; this is new UI over existing data, not a new data source.
-// "Replace media" (Edit only) hands off to BlockEditPanel — the upload flow
-// that already exists there (3.15b) — rather than re-implementing upload
-// inside the modal. "Verify chain" has no backend endpoint for a manual
-// re-check yet (see docs/known-issues.md), so it mirrors the design
-// prototype's own stub behavior (closes the modal) and says so beneath the
-// buttons instead of pretending to call something real.
-function BlockDetailModal({
-  block, index, isEdit, onClose, onReplaceMedia,
-}: {
-  block: ProfileBlock; index: number; isEdit: boolean; onClose: () => void; onReplaceMedia: () => void;
-}) {
-  const [imgError, setImgError] = useState(false);
-  const kind = blockKind(block);
-  const marks = blockMarks(block);
-  const dark = kind === "VIDEO";
-  const resolvedUrl = block.media?.storage_url ? mediaUrl(block.media.storage_url) : null;
-  const showRealImage = kind === "PHOTO" && !!resolvedUrl && !imgError;
-  const dateLabel = formatTileDate(block.media?.uploaded_at ?? block.createdAt);
-
-  const rows: Array<{ k: string; v: string }> = [
-    { k: "type", v: kind.toLowerCase() },
-    { k: "signature", v: blockHashLabel(block) },
-    { k: "captured", v: dateLabel },
-    { k: "attestations", v: marks.length ? marks.join(" · ") : "none yet" },
-  ];
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 90, background: "rgba(26,16,53,0.55)",
-        backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 40,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 600, maxWidth: "100%", background: "#fff", border: `1px solid ${GR_LILAC}` }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 22px", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
-          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.4px", textTransform: "uppercase", color: GR_PRIMARY }}>
-            Block {String(index + 1).padStart(2, "0")} · {kind}
-          </span>
-          <span onClick={onClose} style={{ fontSize: 18, color: GR_MUTED, cursor: "pointer", lineHeight: 1 }}>×</span>
-        </div>
-
-        <div style={{ padding: "24px 22px 26px" }}>
-          <div
-            style={{
-              height: 190, border: `1px solid ${GR_BORDER}`, background: dark ? GR_INKSTRIPE : GR_STRIPE,
-              display: "flex", alignItems: "flex-end", justifyContent: showRealImage ? undefined : "flex-start",
-              padding: 12, overflow: "hidden", position: "relative",
-            }}
-          >
-            {showRealImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={resolvedUrl!}
-                alt=""
-                onError={() => setImgError(true)}
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            ) : (
-              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: dark ? GR_LILAC : GR_MUTED }}>
-                {blockMediaLabel(kind)}
-              </span>
-            )}
-          </div>
-
-          <h2 style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.6px", margin: "20px 0 0", lineHeight: 1.25, color: GR_INK }}>
-            {block.title || "Untitled block"}
-          </h2>
-          <div style={{ fontSize: 14.5, color: GR_BODY, lineHeight: 1.6, marginTop: 10 }}>
-            {block.desc || "No description yet."}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 1, background: GR_BORDER, border: `1px solid ${GR_BORDER}`, marginTop: 22 }}>
-            {rows.map((r) => (
-              <div key={r.k} style={{ background: "#fff", padding: "13px 15px" }}>
-                <div style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, letterSpacing: "1.2px", textTransform: "uppercase", color: GR_MUTED }}>
-                  {r.k}
-                </div>
-                <div style={{ fontFamily: GR_MONO_FONT, fontSize: 12, color: GR_INK, marginTop: 6, wordBreak: "break-all" }}>
-                  {r.v}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", gap: 12, marginTop: 22, flexWrap: "wrap" }}>
-            <span
-              onClick={onClose}
-              style={{ fontSize: 14, fontWeight: 600, color: "#fff", background: GR_PRIMARY, padding: "11px 20px", borderRadius: 4, cursor: "pointer" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
-            >
-              Verify chain
-            </span>
-            {isEdit && (
-              <span
-                onClick={onReplaceMedia}
-                style={{ fontSize: 14, fontWeight: 600, color: GR_PRIMARY, border: `1px solid ${GR_LILAC}`, padding: "11px 20px", borderRadius: 4, cursor: "pointer" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = GR_PRIMARY; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = GR_LILAC; }}
-              >
-                Replace media
-              </span>
-            )}
-          </div>
-          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, marginTop: 12, lineHeight: 1.5 }}>
-            Verify chain re-runs the same hourly automatic check — a manual trigger isn&apos;t wired to a backend endpoint yet.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// BlockDetailModal (3.15d) now lives in @/components/GridOfRecord — generalized
+// with `headerPrefix`/`secondaryAction` props so the search results page
+// (3.16b) can reuse the exact same modal with "Open entity page" instead of
+// "Replace media", instead of a second copy of ~110 lines of JSX.
 
 export default function ProfilePage() {
   const vw = useViewport();
@@ -1128,13 +925,15 @@ export default function ProfilePage() {
               return (
                 <BlockDetailModal
                   block={openBlock}
-                  index={openIndex}
-                  isEdit={store.view === "edit"}
+                  headerPrefix={`Block ${String(openIndex + 1).padStart(2, "0")}`}
                   onClose={() => setOpenBlockId(null)}
-                  onReplaceMedia={() => {
-                    setOpenBlockId(null);
-                    setEditingBlockId(openBlock.id);
-                  }}
+                  secondaryAction={store.view === "edit" ? {
+                    label: "Replace media",
+                    onClick: () => {
+                      setOpenBlockId(null);
+                      setEditingBlockId(openBlock.id);
+                    },
+                  } : null}
                 />
               );
             })()}
