@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AppHeader from "@/components/AppHeader";
 
 // ===== "Grid of Record" design tokens (3.16, docs/design/search-home-results) =====
 // Same palette as the profile redesign (3.15) — kept as a local copy since
 // this page and profile/page.tsx don't share a components module yet.
 const GR_INK = "#1A1035";
-const GR_BODY = "#4A3F6B";
 const GR_MUTED = "#9088B0";
 const GR_PRIMARY = "#6B3FA0";
 const GR_PRIMARY_HOVER = "#5A3488";
@@ -56,46 +56,19 @@ export default function HomePage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F4F2F8", fontFamily: GR_UI_FONT, color: GR_INK }}>
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: m ? "16px 16px 60px" : "24px 24px 80px" }}>
+      <AppHeader />
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: m ? "96px 16px 60px" : "104px 24px 80px" }}>
         <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}` }}>
-          {/* Region 1: nav */}
+          {/* Region 1: wordmark strip — auth-aware nav lives in AppHeader above */}
           <div
             style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20,
+              display: "flex", alignItems: "center", gap: 6,
               padding: m ? "12px 16px" : "12px 26px", borderBottom: `1px solid ${GR_BORDER}`,
             }}
           >
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span style={{ fontSize: m ? 18 : 20, fontWeight: 600, color: GR_PRIMARY, lineHeight: 1, letterSpacing: "-0.5px" }}>Θ</span>
-              <span style={{ fontSize: m ? 12 : 14, fontWeight: 300, lineHeight: 1 }}>+</span>
-              <span style={{ fontSize: m ? 16 : 18, fontWeight: 600, color: GR_ORANGE, lineHeight: 1 }}>π</span>
-            </div>
-
-            {m ? (
-              <Link
-                href="/claim"
-                style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_PRIMARY, letterSpacing: "0.4px", textDecoration: "none" }}
-              >
-                claim page
-              </Link>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 26 }}>
-                <Link href="/search" style={{ fontSize: 13.5, color: GR_BODY, textDecoration: "none" }}>Search</Link>
-                <Link href="/profile" style={{ fontSize: 13.5, color: GR_BODY, textDecoration: "none" }}>My page</Link>
-                <Link href="/settings" style={{ fontSize: 13.5, color: GR_BODY, textDecoration: "none" }}>Settings</Link>
-                <Link
-                  href="/claim"
-                  style={{
-                    fontSize: 13.5, fontWeight: 600, color: "#fff", background: GR_PRIMARY,
-                    padding: "8px 15px", borderRadius: 4, textDecoration: "none",
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
-                >
-                  Claim your page
-                </Link>
-              </div>
-            )}
+            <span style={{ fontSize: m ? 18 : 20, fontWeight: 600, color: GR_PRIMARY, lineHeight: 1, letterSpacing: "-0.5px" }}>Θ</span>
+            <span style={{ fontSize: m ? 12 : 14, fontWeight: 300, lineHeight: 1 }}>+</span>
+            <span style={{ fontSize: m ? 16 : 18, fontWeight: 600, color: GR_ORANGE, lineHeight: 1 }}>π</span>
           </div>
 
           {/* Region 2: query field — the query line is the page */}
