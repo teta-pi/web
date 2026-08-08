@@ -115,10 +115,10 @@ export function SealGlyph({ kind, verified, size = 14 }: { kind: SealKind; verif
 // `secondaryAction` replaces the profile-only "Replace media" escape hatch
 // with whatever the caller's second button should do (or omits it).
 export function BlockDetailModal({
-  block, headerPrefix, onClose, secondaryAction,
+  block, headerPrefix, onClose, secondaryAction, mobile: m = false,
 }: {
   block: ProfileBlock; headerPrefix: string; onClose: () => void;
-  secondaryAction: { label: string; onClick: () => void } | null;
+  secondaryAction: { label: string; onClick: () => void } | null; mobile?: boolean;
 }) {
   const [imgError, setImgError] = useState(false);
   const kind = blockKind(block);
@@ -140,12 +140,12 @@ export function BlockDetailModal({
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 90, background: "rgba(26,16,53,0.55)",
-        backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 40,
+        backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: m ? 16 : 40,
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: 600, maxWidth: "100%", background: "#fff", border: `1px solid ${GR_LILAC}` }}
+        style={{ width: 600, maxWidth: "100%", background: "#fff", border: `1px solid ${GR_LILAC}`, maxHeight: "100%", overflowY: "auto" }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 22px", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
           <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.4px", textTransform: "uppercase", color: GR_PRIMARY }}>
@@ -154,10 +154,10 @@ export function BlockDetailModal({
           <span onClick={onClose} style={{ fontSize: 18, color: GR_MUTED, cursor: "pointer", lineHeight: 1 }}>×</span>
         </div>
 
-        <div style={{ padding: "24px 22px 26px" }}>
+        <div style={{ padding: m ? "18px 16px 20px" : "24px 22px 26px" }}>
           <div
             style={{
-              height: 190, border: `1px solid ${GR_BORDER}`, background: dark ? GR_INKSTRIPE : GR_STRIPE,
+              height: m ? 140 : 190, border: `1px solid ${GR_BORDER}`, background: dark ? GR_INKSTRIPE : GR_STRIPE,
               display: "flex", alignItems: "flex-end", justifyContent: showRealImage ? undefined : "flex-start",
               padding: 12, overflow: "hidden", position: "relative",
             }}
@@ -177,14 +177,14 @@ export function BlockDetailModal({
             )}
           </div>
 
-          <h2 style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.6px", margin: "20px 0 0", lineHeight: 1.25, color: GR_INK }}>
+          <h2 style={{ fontSize: m ? 18 : 21, fontWeight: 700, letterSpacing: "-0.6px", margin: "20px 0 0", lineHeight: 1.25, color: GR_INK }}>
             {block.title || "Untitled block"}
           </h2>
           <div style={{ fontSize: 14.5, color: GR_BODY, lineHeight: 1.6, marginTop: 10 }}>
             {block.desc || "No description yet."}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 1, background: GR_BORDER, border: `1px solid ${GR_BORDER}`, marginTop: 22 }}>
+          <div style={{ display: "grid", gridTemplateColumns: m ? "1fr" : "repeat(2,1fr)", gap: 1, background: GR_BORDER, border: `1px solid ${GR_BORDER}`, marginTop: 22 }}>
             {rows.map((r) => (
               <div key={r.k} style={{ background: "#fff", padding: "13px 15px" }}>
                 <div style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, letterSpacing: "1.2px", textTransform: "uppercase", color: GR_MUTED }}>

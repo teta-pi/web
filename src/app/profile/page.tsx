@@ -148,14 +148,39 @@ interface AttestationCell {
 function AttestationCellView({ cell, mobile: m }: { cell: AttestationCell; mobile: boolean }) {
   const [hover, setHover] = useState(false);
   const lineColor = cell.verified ? (cell.kind === "btc" ? GR_ORANGE : GR_PRIMARY) : GR_MUTED;
+
+  // Mobile (3.15f): the spec's own mobile board drops the desktop's 3-up row
+  // in favor of three full-width rows (glyph + token + state), still the
+  // first thing on the page — same "trust before identity" priority, just
+  // stacked instead of side-by-side. Real `state` text is kept (not
+  // collapsed to a bare "✓" the way the mock's own always-verified demo data
+  // implies) so an unverified/pending cell still says so on mobile.
+  if (m) {
+    return (
+      <div
+        onClick={() => setHover((h) => !h)}
+        style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "11px 16px",
+          borderBottom: `1px solid #F1EDF9`, background: hover ? GR_TINT : "transparent",
+        }}
+      >
+        <SealGlyph kind={cell.kind} verified={cell.verified} size={11} />
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, letterSpacing: "0.3px", color: GR_INK, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {cell.token}
+        </span>
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: lineColor, flexShrink: 0, paddingLeft: 8 }}>
+          {cell.verified ? "✓ " : ""}{cell.state}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        // Full mobile layout (seals stacked as full-width rows) is 3.15f's job —
-        // this basis just keeps cells from clipping on narrow viewports meanwhile.
-        flex: m ? "1 1 50%" : 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12,
+        flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12,
         padding: "15px 20px", borderRight: `1px solid ${GR_BORDER}`,
         background: hover ? GR_TINT : "transparent",
       }}
@@ -222,11 +247,11 @@ function AttestationBar({ mobile: m, updatedAt }: { mobile: boolean; updatedAt: 
   const cells = [registryCell, c2paCell, btcCell];
 
   return (
-    <div style={{ display: "flex", alignItems: "stretch", flexWrap: m ? "wrap" : "nowrap", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
+    <div style={{ display: "flex", flexDirection: m ? "column" : "row", alignItems: "stretch", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
       {cells.map((c) => (
         <AttestationCellView key={c.key} cell={c} mobile={m} />
       ))}
-      <div style={{ width: m ? undefined : 210, flex: m ? "1 1 100%" : "none", display: "flex", alignItems: "center", gap: 9, padding: "15px 20px" }}>
+      <div style={{ width: m ? undefined : 210, display: "flex", alignItems: "center", gap: 9, padding: m ? "11px 16px" : "15px 20px" }}>
         <span className="tp-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: GR_ORANGE, flexShrink: 0 }} />
         <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, lineHeight: 1.5 }}>
           re-checked hourly<br />{formatRecheckTs(updatedAt)}
@@ -241,7 +266,7 @@ function AttestationBar({ mobile: m, updatedAt }: { mobile: boolean; updatedAt: 
 // description keep EditView's old inline-edit behaviour (Edit → Save toggle),
 // just relocated here since identity is now shared chrome across all three
 // modes instead of something EditView alone rendered.
-function ProfileIdentity({ mobile: m, slug }: { mobile: boolean; slug: string | null }) {
+function ProfileIdentity({ mobile: m, slug, verificationLevel }: { mobile: boolean; slug: string | null; verificationLevel: VerificationLevel | null }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
   const [fieldsEditing, setFieldsEditing] = useState(!store.companyName);
@@ -275,11 +300,125 @@ function ProfileIdentity({ mobile: m, slug }: { mobile: boolean; slug: string | 
     { key: "agent", label: "Agent" },
   ];
 
+  const nameEl = isEdit && fieldsEditing ? (
+    <input
+      value={store.companyName}
+      onChange={(e) => store.setCompanyName(e.target.value)}
+      placeholder={namePlaceholder}
+      autoFocus
+      style={{ fontSize: m ? 20 : 34, fontWeight: 700, letterSpacing: "-1.1px", color: GR_INK, border: "none", background: "transparent", fontFamily: "inherit", margin: 0, flex: "1 1 260px", minWidth: 0 }}
+    />
+  ) : (
+    <h1 style={{ fontSize: m ? 20 : 34, fontWeight: 700, letterSpacing: m ? "-0.5px" : "-1.1px", margin: 0, lineHeight: 1.1, color: GR_INK }}>
+      {store.companyName || namePlaceholder}
+    </h1>
+  );
+
+  const descEl = isEdit && fieldsEditing ? (
+    <textarea
+      value={store.description}
+      onChange={(e) => store.setDescription(e.target.value)}
+      placeholder={descPlaceholder}
+      rows={3}
+      style={{ width: "100%", maxWidth: 640, fontSize: 15.5, color: GR_BODY, lineHeight: 1.55, border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", margin: "13px 0 0" }}
+    />
+  ) : (
+    <p style={{ fontSize: 15.5, color: store.description ? GR_BODY : GR_MUTED, lineHeight: 1.55, margin: "13px 0 0", maxWidth: 640 }}>
+      {store.description || descPlaceholder}
+    </p>
+  );
+
+  const modeSwitchEl = (
+    <div style={{ display: "flex", border: `1px solid ${GR_BORDER}` }}>
+      {modes.map((md) => {
+        const active = store.view === md.key;
+        return (
+          <div
+            key={md.key}
+            onClick={() => store.setView(md.key)}
+            style={{ fontSize: 13, fontWeight: 600, padding: "9px 16px", cursor: "pointer", color: active ? "#fff" : GR_BODY, background: active ? GR_PRIMARY : "transparent", borderRight: `1px solid ${GR_BORDER}` }}
+          >
+            {md.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const editControlsEl = isEdit && (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      {store.savedAt && !fieldsEditing && !saving && (
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED }}>
+          saved {store.savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      )}
+      <button
+        onClick={fieldsEditing ? handleSave : () => setFieldsEditing(true)}
+        disabled={saving}
+        style={{
+          padding: "8px 15px", borderRadius: 4, border: "none",
+          background: saving ? "rgba(107,63,160,0.35)" : GR_PRIMARY,
+          color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+          cursor: saving ? "default" : "pointer", display: "flex", alignItems: "center", gap: 6,
+        }}
+        onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
+        onMouseLeave={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
+      >
+        {saving ? <><SpinnerIcon size={12} /> Saving…</> : fieldsEditing ? "Save" : "Edit"}
+      </button>
+    </div>
+  );
+
+  const shareableEl = (
+    <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, letterSpacing: "0.6px" }}>
+      shareable · agent-readable
+    </span>
+  );
+
+  // Mobile (3.15f): spec's own mobile board collapses this into avatar (60×60,
+  // down from 104) + name (20px) + a single `handle · trust N` mono line —
+  // description and the mode switch/edit controls aren't in that compact
+  // preview at all, but dropping them would be a real functionality
+  // regression (not a layout adaptation), so they're kept, just reflowed
+  // into their own full-width rows below the avatar+name row instead of
+  // competing for space in one wrapping flex row like desktop.
+  if (m) {
+    return (
+      <div style={{ padding: "18px 16px 14px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div
+            style={{
+              width: 60, height: 60, flexShrink: 0,
+              border: `1px solid ${GR_BORDER}`, background: GR_STRIPE,
+              display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 6,
+            }}
+          >
+            <span style={{ fontFamily: GR_MONO_FONT, fontSize: 8, color: GR_MUTED, letterSpacing: "0.4px" }}>avatar</span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {nameEl}
+            {slug && (
+              <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_PRIMARY, marginTop: 7 }}>
+                tetapi.dev/{slug} · trust {trustOrdinal(verificationLevel)}
+              </div>
+            )}
+          </div>
+        </div>
+        {descEl}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          {modeSwitchEl}
+          {editControlsEl}
+        </div>
+        {shareableEl}
+      </div>
+    );
+  }
+
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 28, padding: m ? "24px 20px 20px" : "32px 34px 24px", flexWrap: m ? "wrap" : "nowrap" }}>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 28, padding: "32px 34px 24px", flexWrap: "nowrap" }}>
       <div
         style={{
-          width: m ? 72 : 104, height: m ? 72 : 104, flexShrink: 0,
+          width: 104, height: 104, flexShrink: 0,
           border: `1px solid ${GR_BORDER}`, background: GR_STRIPE,
           display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 9,
         }}
@@ -289,84 +428,20 @@ function ProfileIdentity({ mobile: m, slug }: { mobile: boolean; slug: string | 
 
       <div style={{ flex: "1 1 260px", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          {isEdit && fieldsEditing ? (
-            <input
-              value={store.companyName}
-              onChange={(e) => store.setCompanyName(e.target.value)}
-              placeholder={namePlaceholder}
-              autoFocus
-              style={{ fontSize: m ? 24 : 34, fontWeight: 700, letterSpacing: "-1.1px", color: GR_INK, border: "none", background: "transparent", fontFamily: "inherit", margin: 0, flex: "1 1 260px", minWidth: 0 }}
-            />
-          ) : (
-            <h1 style={{ fontSize: m ? 24 : 34, fontWeight: 700, letterSpacing: "-1.1px", margin: 0, lineHeight: 1.02, color: GR_INK }}>
-              {store.companyName || namePlaceholder}
-            </h1>
-          )}
+          {nameEl}
           {slug && (
             <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11.5, color: GR_PRIMARY, border: `1px solid ${GR_LILAC}`, padding: "3px 8px" }}>
               tetapi.dev/{slug}
             </span>
           )}
         </div>
-
-        {isEdit && fieldsEditing ? (
-          <textarea
-            value={store.description}
-            onChange={(e) => store.setDescription(e.target.value)}
-            placeholder={descPlaceholder}
-            rows={3}
-            style={{ width: "100%", maxWidth: 640, fontSize: 15.5, color: GR_BODY, lineHeight: 1.55, border: "none", background: "transparent", fontFamily: "inherit", resize: "vertical", margin: "13px 0 0" }}
-          />
-        ) : (
-          <p style={{ fontSize: 15.5, color: store.description ? GR_BODY : GR_MUTED, lineHeight: 1.55, margin: "13px 0 0", maxWidth: 640 }}>
-            {store.description || descPlaceholder}
-          </p>
-        )}
+        {descEl}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 14, flexShrink: 0 }}>
-        <div style={{ display: "flex", border: `1px solid ${GR_BORDER}` }}>
-          {modes.map((md) => {
-            const active = store.view === md.key;
-            return (
-              <div
-                key={md.key}
-                onClick={() => store.setView(md.key)}
-                style={{ fontSize: 13, fontWeight: 600, padding: "9px 16px", cursor: "pointer", color: active ? "#fff" : GR_BODY, background: active ? GR_PRIMARY : "transparent", borderRight: `1px solid ${GR_BORDER}` }}
-              >
-                {md.label}
-              </div>
-            );
-          })}
-        </div>
-
-        {isEdit && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {store.savedAt && !fieldsEditing && !saving && (
-              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED }}>
-                saved {store.savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            )}
-            <button
-              onClick={fieldsEditing ? handleSave : () => setFieldsEditing(true)}
-              disabled={saving}
-              style={{
-                padding: "8px 15px", borderRadius: 4, border: "none",
-                background: saving ? "rgba(107,63,160,0.35)" : GR_PRIMARY,
-                color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                cursor: saving ? "default" : "pointer", display: "flex", alignItems: "center", gap: 6,
-              }}
-              onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
-              onMouseLeave={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
-            >
-              {saving ? <><SpinnerIcon size={12} /> Saving…</> : fieldsEditing ? "Save" : "Edit"}
-            </button>
-          </div>
-        )}
-
-        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, letterSpacing: "0.6px" }}>
-          shareable · agent-readable
-        </span>
+        {modeSwitchEl}
+        {editControlsEl}
+        {shareableEl}
       </div>
     </div>
   );
@@ -418,9 +493,9 @@ function FactsStrip({
 // old direct-to-BlockEditPanel bridge is gone; the panel is now reached one
 // click deeper, via the modal's "Replace media" action (see BlockDetailModal).
 function StatementTile({
-  block, index, isEdit, onOpen,
+  block, index, isEdit, onOpen, mobile: m,
 }: {
-  block: ProfileBlock; index: number; isEdit: boolean; onOpen: () => void;
+  block: ProfileBlock; index: number; isEdit: boolean; onOpen: () => void; mobile: boolean;
 }) {
   const store = useProfileStore();
   const sharedToken = useAuthStore((s) => s.token);
@@ -482,18 +557,32 @@ function StatementTile({
         opacity: isDragging ? 0.3 : 1, display: "flex", flexDirection: "column", overflow: "hidden",
       }}
     >
-      {/* Head */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", borderBottom: "1px solid #F1EDF9", flexShrink: 0 }}>
-        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_MUTED, letterSpacing: "0.6px" }}>
-          {String(index + 1).padStart(2, "0")} · {kind}
-        </span>
-        <span style={{ display: "flex", gap: 4 }}>
-          {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={8} />)}
-        </span>
-      </div>
+      {/* Head — desktop only. Mobile (3.15f) collapses this into the media
+          area (kind top-left, seals top-right) per spec, freeing a row of
+          vertical space at 390px. */}
+      {!m && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", borderBottom: "1px solid #F1EDF9", flexShrink: 0 }}>
+          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_MUTED, letterSpacing: "0.6px" }}>
+            {String(index + 1).padStart(2, "0")} · {kind}
+          </span>
+          <span style={{ display: "flex", gap: 4 }}>
+            {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={8} />)}
+          </span>
+        </div>
+      )}
 
       {/* Media */}
       <div style={{ flex: 1, minHeight: 0, position: "relative", background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {m && (
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: 9 }}>
+            <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9, color: mediaLabelColor, letterSpacing: "0.6px" }}>
+              {String(index + 1).padStart(2, "0")} · {kind}
+            </span>
+            <span style={{ display: "flex", gap: 3 }}>
+              {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={7} />)}
+            </span>
+          </div>
+        )}
         {showRealImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -507,12 +596,14 @@ function StatementTile({
         )}
       </div>
 
-      {/* Foot */}
-      <div style={{ padding: "12px 13px 13px", borderTop: "1px solid #F1EDF9", flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.3, letterSpacing: "-0.2px", color: GR_INK }}>
+      {/* Foot — mobile drops the date/meta line (spec's own mobile tile foot
+          is title-only, mono 11.5px); still available in the hover overlay
+          and the detail modal, nothing lost. */}
+      <div style={{ padding: m ? 9 : "12px 13px 13px", borderTop: "1px solid #F1EDF9", flexShrink: 0 }}>
+        <div style={{ fontSize: m ? 11.5 : 14, fontWeight: 600, lineHeight: 1.3, letterSpacing: "-0.2px", color: GR_INK }}>
           {block.title || "Untitled block"}
         </div>
-        <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, marginTop: 7 }}>{dateLabel}</div>
+        {!m && <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, marginTop: 7 }}>{dateLabel}</div>}
       </div>
 
       {/* Hover overlay */}
@@ -537,18 +628,26 @@ function StatementTile({
   );
 }
 
-function AddBlockTile({ onAdd }: { onAdd: () => void }) {
+function AddBlockTile({ onAdd, mobile: m }: { onAdd: () => void; mobile: boolean }) {
   const [hover, setHover] = useState(false);
+  const boxStyle: React.CSSProperties = {
+    aspectRatio: "1", border: `1px dashed ${hover ? GR_PRIMARY : GR_LILAC}`, background: hover ? GR_TINT : GR_RAISED,
+    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+  };
+
+  // Mobile (3.15f): a single compact "+ ADD" row instead of the desktop's
+  // 3-line +/ADD BLOCK/kind-list tile — spec's own mobile add tile.
+  if (m) {
+    return (
+      <div onClick={onAdd} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{ ...boxStyle, flexDirection: "row", gap: 7 }}>
+        <span style={{ fontSize: 20, fontWeight: 300, color: GR_PRIMARY, lineHeight: 1 }}>+</span>
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: GR_PRIMARY, letterSpacing: "0.8px" }}>ADD</span>
+      </div>
+    );
+  }
+
   return (
-    <div
-      onClick={onAdd}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        aspectRatio: "1", border: `1px dashed ${hover ? GR_PRIMARY : GR_LILAC}`, background: hover ? GR_TINT : GR_RAISED,
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 9, cursor: "pointer",
-      }}
-    >
+    <div onClick={onAdd} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{ ...boxStyle, flexDirection: "column", gap: 9 }}>
       <span style={{ fontSize: 28, fontWeight: 300, color: GR_PRIMARY, lineHeight: 1 }}>+</span>
       <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_PRIMARY, letterSpacing: "0.8px" }}>ADD BLOCK</span>
       {/* "audio" dropped — no backing media type today, see blockKind() above */}
@@ -567,6 +666,43 @@ function LedgerControls({
   const filters: LedgerFilter[] = ["ALL", "VIDEO", "PHOTO", "TEXT", "FILE"];
   const hint = isEdit ? "drag a square to reorder · click to inspect" : "click a square to inspect";
 
+  const chips = filters.map((f) => {
+    const active = filter === f;
+    return (
+      <span
+        key={f}
+        onClick={() => setFilter(f)}
+        style={{
+          fontFamily: GR_MONO_FONT, fontSize: 10.5, letterSpacing: "0.6px", padding: "6px 11px", cursor: "pointer",
+          color: active ? GR_INK : GR_MUTED, border: `1px solid ${active ? GR_PRIMARY : GR_BORDER}`,
+          background: active ? GR_TINT : "#fff", flexShrink: 0, whiteSpace: "nowrap",
+        }}
+      >
+        {f === "ALL" ? `all ${total}` : f.toLowerCase()}
+      </span>
+    );
+  });
+
+  // Mobile (3.15f): chips scroll horizontally instead of wrapping (spec) —
+  // label moves to its own line above so it doesn't eat into the scroll
+  // track's width; hint/Camera button drop to their own row below.
+  if (m) {
+    return (
+      <div style={{ padding: "18px 16px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.6px", textTransform: "uppercase", color: GR_PRIMARY }}>
+          Statements
+        </span>
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          {chips}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          {hint && <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED }}>{hint}</span>}
+          {isEdit && <PiCamButton businessId={businessId} entityName={entityName} />}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, padding: "22px 34px 15px", flexWrap: "wrap" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -574,22 +710,7 @@ function LedgerControls({
           Statements
         </span>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {filters.map((f) => {
-            const active = filter === f;
-            return (
-              <span
-                key={f}
-                onClick={() => setFilter(f)}
-                style={{
-                  fontFamily: GR_MONO_FONT, fontSize: 10.5, letterSpacing: "0.6px", padding: "6px 11px", cursor: "pointer",
-                  color: active ? GR_INK : GR_MUTED, border: `1px solid ${active ? GR_PRIMARY : GR_BORDER}`,
-                  background: active ? GR_TINT : "#fff",
-                }}
-              >
-                {f === "ALL" ? `all ${total}` : f.toLowerCase()}
-              </span>
-            );
-          })}
+          {chips}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -639,7 +760,7 @@ function StatementLedger({
   };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: m ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: 10, padding: "0 34px 34px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: m ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: 10, padding: m ? "0 16px 18px" : "0 34px 34px" }}>
       {visible.map(({ block, index }) => (
         <StatementTile
           key={block.id}
@@ -647,9 +768,10 @@ function StatementLedger({
           index={index}
           isEdit={isEdit}
           onOpen={() => onOpenBlock(block.id)}
+          mobile={m}
         />
       ))}
-      {isEdit && <AddBlockTile onAdd={handleAddBlock} />}
+      {isEdit && <AddBlockTile onAdd={handleAddBlock} mobile={m} />}
       {!isEdit && visible.length === 0 && (
         <div style={{ gridColumn: "1 / -1", padding: "40px 0", textAlign: "center", color: GR_MUTED, fontSize: 13.5 }}>
           No statements yet.
@@ -852,7 +974,7 @@ export default function ProfilePage() {
                 mobile layout (3.15f) is still open. */}
             <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}`, marginBottom: 26 }}>
               <AttestationBar mobile={m} updatedAt={entityMeta.updatedAt} />
-              <ProfileIdentity mobile={m} slug={slug} />
+              <ProfileIdentity mobile={m} slug={slug} verificationLevel={entityMeta.verificationLevel} />
               <FactsStrip mobile={m} verificationLevel={entityMeta.verificationLevel} createdAt={entityMeta.createdAt} />
               {/* Remount on entity switch: VerifyMenu keeps its own useState
                   (registryStatus, emailDone, linked, isPublished…) that has
@@ -927,6 +1049,7 @@ export default function ProfilePage() {
                   block={openBlock}
                   headerPrefix={`Block ${String(openIndex + 1).padStart(2, "0")}`}
                   onClose={() => setOpenBlockId(null)}
+                  mobile={m}
                   secondaryAction={store.view === "edit" ? {
                     label: "Replace media",
                     onClick: () => {
