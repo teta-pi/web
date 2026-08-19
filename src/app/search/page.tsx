@@ -31,6 +31,7 @@ interface ResultRowData {
   marks: EntityMark[];
   trustLabel: string;
   trustColor: string;
+  trustDashed: boolean;
   answer: string;
 }
 
@@ -55,17 +56,20 @@ function buildAnswer(hasRegistry: boolean, blocks: ProfileBlock[]): string {
 
 // Entity-level marks (unlike a block tile's marks, capped at c2pa+btc since
 // there's no per-block registry association — 3.15b) can include all three:
-// registry verification is entity-level, so it's real here. 0 marks is a
-// state the design mock never shows (its example entities all have ≥1) but
-// real claimed-and-unattested entities exist in prod today — they're kept
-// out of the ranked list and the trust filters entirely, surfaced only in
-// the withheld tail (see buildRow's caller and the withheld-tail known-issue
-// this session logs).
-function trustBadge(marks: EntityMark[]): { label: string; color: string } {
-  if (marks.length === 3) return { label: "L3 media-backed", color: GR_PRIMARY };
-  if (marks.length === 2) return { label: "L2 partial chain", color: GR_ORANGE };
-  if (marks.length === 1) return { label: "L1 declared only", color: GR_MUTED };
-  return { label: "unattested", color: GR_MUTED };
+// registry verification is entity-level, so it's real here. 0 marks (L0,
+// `verification_level: "none"`) is a normal, documented registry state
+// (whitepaper §3.4 — any name can be claimed instantly, free, with no
+// registration check) — it ranks last, it is not hidden (3.21 fix; see
+// roadmap.md 3.16/3.21 for why 3.16b's "withheld tail" reinterpretation was
+// wrong: the design's withheld tail was for unsigned *open-source mentions*,
+// a feature that doesn't exist in this codebase — L0 claimed entities are
+// not that, they're the spec's own "declaration-only records" which the
+// ranking rule says outrank nothing but must still render).
+function trustBadge(marks: EntityMark[]): { label: string; color: string; dashed: boolean } {
+  if (marks.length === 3) return { label: "L3 media-backed", color: GR_PRIMARY, dashed: false };
+  if (marks.length === 2) return { label: "L2 partial chain", color: GR_ORANGE, dashed: false };
+  if (marks.length === 1) return { label: "L1 declared only", color: GR_MUTED, dashed: false };
+  return { label: "L0 no attestation on record", color: GR_MUTED, dashed: true };
 }
 
 function buildRow(result: SearchResult, rawBlocks: ProfileBlock[]): ResultRowData {
@@ -80,7 +84,7 @@ function buildRow(result: SearchResult, rawBlocks: ProfileBlock[]): ResultRowDat
   const badge = trustBadge(marks);
   return {
     result, blocks: rawBlocks, marks,
-    trustLabel: badge.label, trustColor: badge.color,
+    trustLabel: badge.label, trustColor: badge.color, trustDashed: badge.dashed,
     answer: buildAnswer(hasRegistry, rawBlocks),
   };
 }
@@ -171,7 +175,7 @@ function ResultRowView({
   row: ResultRowData; expanded: boolean; onToggle: () => void; onOpenBlock: (block: ProfileBlock) => void;
 }) {
   const [hover, setHover] = useState(false);
-  const { result, blocks, marks, trustLabel, trustColor } = row;
+  const { result, blocks, marks, trustLabel, trustColor, trustDashed } = row;
   const showBg = hover || expanded;
 
   return (
@@ -209,7 +213,7 @@ function ResultRowView({
                 </span>
               ))}
             </span>
-            <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: trustColor, border: `1px solid ${trustColor}`, padding: "2px 7px", letterSpacing: "0.6px" }}>
+            <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: trustColor, border: `1px ${trustDashed ? "dashed" : "solid"} ${trustColor}`, padding: "2px 7px", letterSpacing: "0.6px" }}>
               {trustLabel}
             </span>
             <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED }}>
@@ -251,58 +255,18 @@ function ResultRowView({
   );
 }
 
-// ===== Withheld tail (region 4) =====
-// The design spec's "unverified open-source mentions" (names scraped from
-// outside the platform with no signed block) has no backend behind it —
-// there's no mention-harvesting feature anywhere in this codebase. What
-// prod *does* have today is claimed entities with zero attestations (no
-// registry, no signed block) — the real, honest analogue: kept out of the
-// ranked list and every trust filter, surfaced only here, revealed with a
-// real (not fabricated) count from the same fetched result set. Logged in
-// docs/known-issues.md.
-function WithheldTail({ withheld }: { withheld: ResultRowData[] }) {
-  const [show, setShow] = useState(false);
-  if (withheld.length === 0) return null;
-
-  return (
-    <div style={{ padding: "22px 34px 24px", background: GR_RAISED }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-        <span style={{ width: 11, height: 11, border: `1.5px dashed ${GR_MUTED}`, borderRadius: "50%", flexShrink: 0 }} />
-        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: "1.2px", textTransform: "uppercase", color: GR_MUTED }}>
-          {withheld.length} unverified mention{withheld.length === 1 ? "" : "s"} withheld
-        </span>
-      </div>
-      <div style={{ fontSize: 13.5, color: GR_BODY, lineHeight: 1.55, marginTop: 9, maxWidth: 620 }}>
-        Claimed pages with no registry check and no signed block behind them yet. Shown only if you ask for them explicitly.
-      </div>
-      <span
-        onClick={() => setShow((s) => !s)}
-        style={{ display: "inline-block", fontSize: 13, fontWeight: 600, color: GR_PRIMARY, border: `1px solid ${GR_LILAC}`, padding: "9px 16px", borderRadius: 4, cursor: "pointer", marginTop: 14 }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = GR_PRIMARY; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = GR_LILAC; }}
-      >
-        {show ? "Hide unverified" : "Show unverified"}
-      </span>
-
-      {show && (
-        <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 1, background: GR_BORDER, border: `1px solid ${GR_BORDER}` }}>
-          {withheld.map((w) => (
-            <Link
-              key={w.result.id}
-              href={`/e/${w.result.slug}`}
-              style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "11px 15px", background: "#fff", textDecoration: "none" }}
-            >
-              <span style={{ fontSize: 14, fontWeight: 600, color: GR_INK }}>{w.result.name}</span>
-              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED }}>
-                {ENTITY_TYPE_LABEL[w.result.entity_type].toLowerCase()} · no attestation on record
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// 3.21: the design spec's "withheld tail" was for unsigned open-source
+// *mentions* — names scraped from outside the platform, with no entity
+// record in this database at all. That feature (mention-harvesting) has
+// never existed here. 3.16b conflated it with claimed-but-unattested
+// entities (L0, marks.length === 0) and hid those behind a "Show
+// unverified" button instead — but L0 is a normal, documented registry
+// state (whitepaper §3.4), not an unverified external mention, and the
+// spec's own ranking rule says weaker evidence ranks last, never hidden.
+// Fixed: L0 rows render in the ranked list below (badged "L0 no attestation
+// on record", dashed border) instead of a separate withheld tail. There is
+// still no real content for a "show unverified mentions" action, so the
+// button was removed rather than left dead — see docs/known-issues.md.
 
 // ===== Nav with inline search (region 1 addition — AppHeader stays as the
 // app-wide fixed chrome per 3.15a's precedent; this is just the board's own
@@ -393,12 +357,17 @@ function SearchPageInner() {
         );
         if (cancelled) return;
         const built = results.map((r, i) => buildRow(r, blockLists[i]));
-        setRows(built);
-        // First *ranked* (≥1 mark) result expanded by default, matching the
-        // design spec — seeded once per query, same as the prototype (it
-        // doesn't re-seed when the trust filter changes afterward).
-        const firstRanked = built.find((row) => row.marks.length > 0);
-        setExpanded(firstRanked ? { [firstRanked.result.id]: true } : {});
+        // Full chain > partial chain > declared-only > L0, never by
+        // engagement/payment (design spec's ranking rule) — sorted once here
+        // so both rendering and the default-expand pick below agree on order.
+        const sorted = [...built].sort(
+          (a, b) => b.marks.length - a.marks.length || b.result.relevance_score - a.result.relevance_score
+        );
+        setRows(sorted);
+        // First result expanded by default, matching the design spec —
+        // seeded once per query, same as the prototype (it doesn't re-seed
+        // when the trust filter changes afterward).
+        setExpanded(sorted.length > 0 ? { [sorted[0].result.id]: true } : {});
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -413,23 +382,24 @@ function SearchPageInner() {
     router.push(term ? `/search?q=${encodeURIComponent(term)}` : "/search");
   };
 
-  // Claimed-but-unattested entities (0 marks) never enter the ranked list or
-  // the trust filters — only the withheld tail. See WithheldTail's comment.
-  const ranked = rows?.filter((r) => r.marks.length > 0)
-    .sort((a, b) => b.marks.length - a.marks.length || b.result.relevance_score - a.result.relevance_score) ?? [];
-  const withheld = rows?.filter((r) => r.marks.length === 0) ?? [];
+  // All rows render in the ranked list, already sorted (see the fetch
+  // effect above) — L0 (0 marks) sorts last but is never hidden (3.21 fix).
+  // The FULL/PARTIAL/DECLARED filter tabs still only match ≥1 mark, so L0
+  // rows only ever show under "all results" — they don't get their own tab
+  // (there's nothing weaker than "declared only" worth a dedicated filter).
+  const all = rows ?? [];
 
-  const visible = ranked.filter((r) =>
+  const visible = all.filter((r) =>
     trust === "ALL" ? true :
     trust === "FULL" ? r.marks.length === 3 :
     trust === "PARTIAL" ? r.marks.length === 2 :
     r.marks.length === 1
   );
   const counts: Record<TrustFilter, number> = {
-    ALL: ranked.length,
-    FULL: ranked.filter((r) => r.marks.length === 3).length,
-    PARTIAL: ranked.filter((r) => r.marks.length === 2).length,
-    DECLARED: ranked.filter((r) => r.marks.length === 1).length,
+    ALL: all.length,
+    FULL: all.filter((r) => r.marks.length === 3).length,
+    PARTIAL: all.filter((r) => r.marks.length === 2).length,
+    DECLARED: all.filter((r) => r.marks.length === 1).length,
   };
   const blockCount = visible.reduce((n, r) => n + r.blocks.length, 0);
 
@@ -460,7 +430,6 @@ function SearchPageInner() {
                   onOpenBlock={(block) => setOpenBlock({ block, ownerName: row.result.name, ownerSlug: row.result.slug })}
                 />
               ))}
-              <WithheldTail withheld={withheld} />
             </>
           )}
         </div>
