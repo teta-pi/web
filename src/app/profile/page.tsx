@@ -826,12 +826,19 @@ export default function ProfilePage() {
     return () => window.removeEventListener("teta:unauthorized", onUnauthorized);
   }, []);
 
-  // Restore auth session from localStorage (written by claim flow on Step 5)
+  // Restore auth session from localStorage (written by claim flow on Step 5).
+  // Gated on `token` being present: entity_id/entity_kind must never be
+  // adopted on their own. They used to survive independently of auth_token
+  // (a 401 elsewhere on the site only cleared auth_token, not these two —
+  // fixed in lib/api.ts's handleUnauthorized, but defend here too, since
+  // this effect is the actual call site that turned a stale entity_id into a
+  // real businessId with zero token check — see docs/known-issues.md).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const token = localStorage.getItem("auth_token");
+    if (!token) return;
+    store.setAuthToken(token);
     const entityId = localStorage.getItem("entity_id");
-    if (token) store.setAuthToken(token);
     if (entityId) store.setBusinessId(entityId);
     const kind = normalizeEntityKind(localStorage.getItem("entity_kind"));
     if (kind) store.setEntityKind(kind);
@@ -949,7 +956,16 @@ export default function ProfilePage() {
           position: "relative", zIndex: 1,
         }}
       >
-        {sessionInvalid ? (
+        {/* /profile is never a public view (that's /e/[slug]'s job) — it must
+            require a currently-valid token, not just "no 401 happened yet".
+            sessionInvalid alone used to gate this, but a visitor with no
+            token at all never triggers an authenticated call in the first
+            place (see the businessId-loading effect below), so it could
+            never 401 into sessionInvalid=true either — the page would fall
+            through to rendering real entity data with no auth check. `!token`
+            closes that: no token now means signed-out now, independent of
+            whether a network call ever ran. See docs/known-issues.md. */}
+        {!token || sessionInvalid ? (
           <div style={{ maxWidth: 880, margin: "0 auto" }}>
             <SignedOutPanel
               onSignIn={(token) => {

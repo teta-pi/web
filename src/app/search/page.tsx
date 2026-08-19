@@ -7,6 +7,7 @@ import { searchApi, blockApi } from "@/lib/api";
 import type { SearchResult } from "@/lib/types";
 import { ENTITY_TYPE_LABEL } from "@/lib/types";
 import AppHeader, { APP_HEADER_H } from "@/components/AppHeader";
+import { useAuthStore } from "@/stores/useAuthStore";
 import type { ProfileBlock } from "@/stores/useProfileStore";
 import {
   GR_INK, GR_BODY, GR_MUTED, GR_PRIMARY, GR_PRIMARY_HOVER, GR_LILAC, GR_ORANGE,
@@ -305,8 +306,19 @@ function WithheldTail({ withheld }: { withheld: ResultRowData[] }) {
 
 // ===== Nav with inline search (region 1 addition — AppHeader stays as the
 // app-wide fixed chrome per 3.15a's precedent; this is just the board's own
-// search box + My page link, the part of region 1 that's genuinely new) =====
+// search box + My page link, the part of region 1 that's genuinely new).
+// "My page" is a logged-in-only quick link (same rule AccountMenu already
+// enforces in AppHeader above) — this second nav bar had its own separate
+// Link with no auth check at all, which is the actual leak: AppHeader's own
+// auth-aware AccountMenu was rendering correctly the whole time, but this
+// duplicate link below it wasn't gated on anything. `mounted` mirrors
+// AccountMenu's own guard so this doesn't flash "My page" during the first
+// paint before the persisted auth store hydrates. =====
 function BoardSearchNav({ input, setInput, onSubmit }: { input: string; setInput: (v: string) => void; onSubmit: () => void }) {
+  const { token } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "12px 26px", borderBottom: `1px solid ${GR_BORDER}` }}>
       <div style={{ flex: 1, display: "flex", border: `1px solid ${GR_BORDER}`, minWidth: 0 }}>
@@ -333,7 +345,9 @@ function BoardSearchNav({ input, setInput, onSubmit }: { input: string; setInput
           Search
         </span>
       </div>
-      <Link href="/profile" style={{ fontSize: 13.5, color: GR_BODY, flexShrink: 0, textDecoration: "none" }}>My page</Link>
+      {mounted && token && (
+        <Link href="/profile" style={{ fontSize: 13.5, color: GR_BODY, flexShrink: 0, textDecoration: "none" }}>My page</Link>
+      )}
     </div>
   );
 }
