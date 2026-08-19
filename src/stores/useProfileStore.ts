@@ -72,6 +72,12 @@ interface ProfileState {
   setBusinessId: (id: string) => void;
   setAuthToken: (token: string | null) => void;
   setSavedAt: (d: Date | null) => void;
+  // Clears everything an entity-loading effect keys off of (businessId,
+  // authToken, view, and all the fetched entity fields) — for use on logout,
+  // so a stale in-memory businessId from a prior session can't outlive it on
+  // the same tab (this store is a module-level singleton, not per-entity —
+  // see profile/page.tsx's own comment on that). See docs/known-issues.md.
+  resetSession: () => void;
 }
 
 let _blockCounter = 1;
@@ -131,4 +137,17 @@ export const useProfileStore = create<ProfileState>((set) => ({
   setBusinessId: (businessId) => set({ businessId }),
   setAuthToken: (authToken) => set({ authToken }),
   setSavedAt: (savedAt) => set({ savedAt }),
+  resetSession: () =>
+    set({
+      view: "edit",
+      businessId: null,
+      authToken: null,
+      companyName: "",
+      description: "",
+      blocks: [],
+      nameStatus: "idle",
+      registryStatus: null,
+      registryData: null,
+      savedAt: null,
+    }),
 }));

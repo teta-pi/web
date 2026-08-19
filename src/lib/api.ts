@@ -13,15 +13,31 @@ import { useProfileStore } from "@/stores/useProfileStore";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // A 401 always means the session is dead — never let it fail silently behind
-// a `.catch(() => {})`. Clears both stores + the claim flow's bare localStorage
-// key, and fires a DOM event so any mounted page (profile, settings, …) can
-// drop into a signed-out state instead of continuing to render as if the
-// stale token still worked.
+// a `.catch(() => {})`. Clears both stores + all three of the claim flow's
+// bare localStorage keys (auth_token, entity_id, entity_kind — /claim writes
+// all three together on Step 4/success, see claim/page.tsx and profile/page.tsx's
+// restore effect), and fires a DOM event so any mounted page (profile,
+// settings, …) can drop into a signed-out state instead of continuing to
+// render as if the stale token still worked.
+//
+// Previously this only removed auth_token, leaving entity_id/entity_kind
+// behind — profile/page.tsx's mount effect restored businessId from that
+// stale entity_id with no token check at all, so once a real token expired
+// (401 anywhere on the site), the *next* /profile load would silently fetch
+// and render that real entity's data in Edit mode for whoever had the
+// browser next, auth-free. Clearing all three here closes it at the source.
 function handleUnauthorized() {
   useAuthStore.getState().clearAuth();
-  useProfileStore.getState().setAuthToken(null);
+  // resetSession(), not just setAuthToken(null) — businessId/companyName/
+  // blocks must go too, or the just-invalidated entity's data keeps
+  // rendering (via the /profile loading effect, which only checks
+  // `businessId`, not the token) for however long it takes the sign-in gate
+  // to actually mount.
+  useProfileStore.getState().resetSession();
   if (typeof window !== "undefined") {
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("entity_id");
+    localStorage.removeItem("entity_kind");
     window.dispatchEvent(new Event("teta:unauthorized"));
   }
 }

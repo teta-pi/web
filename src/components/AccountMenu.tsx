@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useProfileStore } from "@/stores/useProfileStore";
 import { authApi, mediaUrl } from "@/lib/api";
 
 const INDIGO = "#5B45C9";
@@ -127,6 +128,15 @@ export default function AccountMenu({ fixed = true, top = 20 }: { fixed?: boolea
           <div
             onClick={() => {
               clearAuth();
+              // useProfileStore is a module-level singleton, not cleared by
+              // clearAuth() (that only touches useAuthStore) — without this,
+              // a stale businessId/authToken from this tab's session could
+              // outlive logout and get rendered again on the next /profile
+              // visit within the same SPA session (docs/known-issues.md).
+              useProfileStore.getState().resetSession();
+              localStorage.removeItem("auth_token");
+              localStorage.removeItem("entity_id");
+              localStorage.removeItem("entity_kind");
               setOpen(false);
               router.push("/");
             }}
