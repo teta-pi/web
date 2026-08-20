@@ -2,6 +2,18 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+// Same local pattern as page.tsx / profile/page.tsx (3.15f, 3.16a) — kept as
+// a local copy since these pages don't share a components module yet.
+function useViewport() {
+  const [vw, setVw] = useState(1280);
+  useEffect(() => {
+    const u = () => setVw(window.innerWidth);
+    u();
+    window.addEventListener("resize", u);
+    return () => window.removeEventListener("resize", u);
+  }, []);
+  return vw;
+}
 import { useRouter, useSearchParams } from "next/navigation";
 import { searchApi, blockApi } from "@/lib/api";
 import type { SearchResult } from "@/lib/types";
@@ -90,12 +102,35 @@ function buildRow(result: SearchResult, rawBlocks: ProfileBlock[]): ResultRowDat
 }
 
 // ===== Evidence tile — StatementTile (3.15b), one size down, per spec =====
-function EvidenceTile({ block, onOpen }: { block: ProfileBlock; onOpen: () => void }) {
+function EvidenceTile({ block, onOpen, mobile = false }: { block: ProfileBlock; onOpen: () => void; mobile?: boolean }) {
   const [hover, setHover] = useState(false);
   const kind = blockKind(block);
   const marks = blockMarks(block);
   const dark = kind === "VIDEO";
   const mediaLabel = blockMediaLabel(kind);
+
+  // Mobile variant collapses the header row into the media area (kind +
+  // marks pinned top, no separate meta-bearing header bar) per the design's
+  // 2-up mobile evidence grid — the desktop three-row tile doesn't fit at
+  // 390px with only two columns of breathing room.
+  if (mobile) {
+    return (
+      <div
+        onClick={onOpen}
+        style={{ aspectRatio: "1", border: `1px solid ${GR_BORDER}`, background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", overflow: "hidden" }}
+      >
+        <div style={{ flex: 1, minHeight: 0, background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: 8 }}>
+          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9, color: dark ? GR_LILAC : GR_MUTED }}>{kind}</span>
+          <span style={{ display: "flex", gap: 3 }}>
+            {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={6} />)}
+          </span>
+        </div>
+        <div style={{ padding: 8, borderTop: "1px solid #F1EDF9", flexShrink: 0, fontSize: 11, fontWeight: 600, lineHeight: 1.25, color: GR_INK }}>
+          {block.title || "Untitled block"}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -125,10 +160,10 @@ function EvidenceTile({ block, onOpen }: { block: ProfileBlock; onOpen: () => vo
 
 // ===== Evidence filter bar (region 2) =====
 function EvidenceFilterBar({
-  trust, setTrust, counts, entityCount, blockCount,
+  trust, setTrust, counts, entityCount, blockCount, mobile = false,
 }: {
   trust: TrustFilter; setTrust: (t: TrustFilter) => void;
-  counts: Record<TrustFilter, number>; entityCount: number; blockCount: number;
+  counts: Record<TrustFilter, number>; entityCount: number; blockCount: number; mobile?: boolean;
 }) {
   const tabs: Array<{ id: TrustFilter; label: string; kind: "registry" | "c2pa" | "btc" }> = [
     { id: "ALL", label: "all results", kind: "registry" },
@@ -136,6 +171,37 @@ function EvidenceFilterBar({
     { id: "PARTIAL", label: "partial chain", kind: "btc" },
     { id: "DECLARED", label: "declared only", kind: "c2pa" },
   ];
+
+  // Mobile: the count cell drops (no room at 390px) and the bar scrolls
+  // horizontally instead of each tab compressing to fit — per spec, tabs
+  // must not wrap to multiple lines.
+  if (mobile) {
+    return (
+      <div style={{ display: "flex", overflowX: "auto", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
+        {tabs.map((t) => {
+          const selected = trust === t.id;
+          return (
+            <div
+              key={t.id}
+              onClick={() => setTrust(t.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 7, padding: "11px 14px",
+                borderRight: `1px solid ${GR_BORDER}`, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                background: selected ? "#F4F0FB" : "transparent",
+                boxShadow: selected ? `inset 0 -2px 0 0 ${GR_PRIMARY}` : "none",
+              }}
+            >
+              <SealGlyph kind={t.kind} verified={t.id !== "ALL"} size={9} />
+              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: selected ? GR_INK : GR_BODY }}>
+                {t.label} {counts[t.id]}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", alignItems: "stretch", borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED }}>
       {tabs.map((t) => {
@@ -164,6 +230,49 @@ function EvidenceFilterBar({
           {entityCount} entities<br />{blockCount} matched blocks
         </span>
       </div>
+    </div>
+  );
+}
+
+// Mobile result row: avatar + name + seal glyphs + trust label, a short
+// answer, and a 2-up evidence grid (first two blocks) — per spec. Evidence
+// is always shown (no collapse toggle) since the row is compact enough at
+// two blocks that hiding it adds a tap for no space saved.
+function MobileResultRowView({
+  row, onOpenBlock,
+}: {
+  row: ResultRowData; onOpenBlock: (block: ProfileBlock) => void;
+}) {
+  const { result, blocks, marks, trustLabel, trustColor, trustDashed } = row;
+  const mobileBlocks = blocks.slice(0, 2);
+
+  return (
+    <div style={{ borderBottom: `1px solid ${GR_BORDER}`, padding: 16 }}>
+      <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ width: 48, height: 48, flexShrink: 0, border: `1px solid ${GR_BORDER}`, background: GR_STRIPE }} />
+        <div style={{ minWidth: 0 }}>
+          <Link
+            href={`/e/${result.slug}`}
+            style={{ display: "block", fontSize: 16, fontWeight: 700, letterSpacing: "-0.4px", lineHeight: 1.15, color: GR_INK, textDecoration: "none" }}
+          >
+            {result.name}
+          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
+            {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={9} />)}
+            <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: trustColor, border: `1px ${trustDashed ? "dashed" : "solid"} ${trustColor}`, padding: "1px 5px" }}>
+              {trustLabel}
+            </span>
+          </div>
+        </div>
+      </div>
+      <p style={{ fontSize: 13.5, color: GR_BODY, lineHeight: 1.5, margin: "11px 0 0" }}>{row.answer}</p>
+      {mobileBlocks.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8, marginTop: 12 }}>
+          {mobileBlocks.map((b) => (
+            <EvidenceTile key={b.id} block={b} onOpen={() => onOpenBlock(b)} mobile />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -278,10 +387,39 @@ function ResultRowView({
 // duplicate link below it wasn't gated on anything. `mounted` mirrors
 // AccountMenu's own guard so this doesn't flash "My page" during the first
 // paint before the persisted auth store hydrates. =====
-function BoardSearchNav({ input, setInput, onSubmit }: { input: string; setInput: (v: string) => void; onSubmit: () => void }) {
+function BoardSearchNav({ input, setInput, onSubmit, mobile = false }: { input: string; setInput: (v: string) => void; onSubmit: () => void; mobile?: boolean }) {
   const { token } = useAuthStore();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  if (mobile) {
+    return (
+      <div style={{ padding: "12px 16px", borderBottom: `1px solid ${GR_BORDER}` }}>
+        <div style={{ display: "flex", border: `1px solid ${GR_BORDER}`, minWidth: 0 }}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "0 11px", minWidth: 0 }}>
+            <span style={{ width: 10, height: 10, flexShrink: 0, border: `1.5px solid ${GR_MUTED}`, borderRadius: "50%" }} />
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+              placeholder="Search verified entities…"
+              style={{
+                display: "block", flex: 1, minWidth: 0, border: "none", background: "transparent",
+                fontFamily: GR_MONO_FONT, fontSize: 11.5, color: GR_INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                padding: "10px 0",
+              }}
+            />
+          </div>
+          <span
+            onClick={onSubmit}
+            style={{ fontSize: 12, fontWeight: 600, color: "#fff", background: GR_PRIMARY, padding: "10px 13px", cursor: "pointer", flexShrink: 0 }}
+          >
+            Go
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "12px 26px", borderBottom: `1px solid ${GR_BORDER}` }}>
@@ -328,6 +466,8 @@ function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const q = searchParams.get("q") ?? "";
+  const vw = useViewport();
+  const m = vw < 640;
 
   const [input, setInput] = useState(q);
   const [rows, setRows] = useState<ResultRowData[] | null>(null);
@@ -406,9 +546,9 @@ function SearchPageInner() {
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)", color: GR_INK }}>
       <AppHeader />
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: `${APP_HEADER_H + 32}px 24px 100px` }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: m ? `${APP_HEADER_H + 20}px 16px 60px` : `${APP_HEADER_H + 32}px 24px 100px` }}>
         <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}` }}>
-          <BoardSearchNav input={input} setInput={setInput} onSubmit={submit} />
+          <BoardSearchNav input={input} setInput={setInput} onSubmit={submit} mobile={m} />
 
           {!q.trim() && <StatusMessage>Search verified businesses, journalists, and creators by name or description.</StatusMessage>}
           {q.trim() !== "" && loading && <StatusMessage>Searching registries…</StatusMessage>}
@@ -419,17 +559,25 @@ function SearchPageInner() {
 
           {q.trim() !== "" && !loading && !error && rows && rows.length > 0 && (
             <>
-              <EvidenceFilterBar trust={trust} setTrust={setTrust} counts={counts} entityCount={visible.length} blockCount={blockCount} />
+              <EvidenceFilterBar trust={trust} setTrust={setTrust} counts={counts} entityCount={visible.length} blockCount={blockCount} mobile={m} />
               {visible.length === 0 && <StatusMessage>No entities at this trust level yet.</StatusMessage>}
-              {visible.map((row) => (
-                <ResultRowView
-                  key={row.result.id}
-                  row={row}
-                  expanded={!!expanded[row.result.id]}
-                  onToggle={() => setExpanded((s) => ({ ...s, [row.result.id]: !s[row.result.id] }))}
-                  onOpenBlock={(block) => setOpenBlock({ block, ownerName: row.result.name, ownerSlug: row.result.slug })}
-                />
-              ))}
+              {visible.map((row) =>
+                m ? (
+                  <MobileResultRowView
+                    key={row.result.id}
+                    row={row}
+                    onOpenBlock={(block) => setOpenBlock({ block, ownerName: row.result.name, ownerSlug: row.result.slug })}
+                  />
+                ) : (
+                  <ResultRowView
+                    key={row.result.id}
+                    row={row}
+                    expanded={!!expanded[row.result.id]}
+                    onToggle={() => setExpanded((s) => ({ ...s, [row.result.id]: !s[row.result.id] }))}
+                    onOpenBlock={(block) => setOpenBlock({ block, ownerName: row.result.name, ownerSlug: row.result.slug })}
+                  />
+                )
+              )}
             </>
           )}
         </div>
