@@ -719,19 +719,62 @@ function UserDetailPanel({ token, detail, onClose, onChanged }: { token: string;
 
 /* ── Claims tab ────────────────────────────────────────────────────────────── */
 
+const CLAIM_OPS_STATUSES = ["contacted", "converted", "rejected"] as const;
+const OPS_STATUS_COLOR: Record<string, string> = { contacted: INDIGO, converted: "#3E9B5C", rejected: "#B04545" };
+
 function ClaimsTab({ token }: { token: string }) {
   const [data, setData] = useState<{ total: number; results: AdminClaim[] } | null>(null);
   const [offset, setOffset] = useState(0);
+  const [opsStatus, setOpsStatus] = useState<string | undefined>(undefined);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    adminApi.claims(token, { offset }).then(setData).catch(() => {});
-  }, [token, offset]);
+  const load = useCallback(() => {
+    adminApi.claims(token, { offset, ops_status: opsStatus }).then(setData).catch(() => {});
+  }, [token, offset, opsStatus]);
+  useEffect(load, [load]);
 
   return (
     <div style={{ ...glass, overflow: "hidden" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <div style={{ padding: "14px 14px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[undefined, ...CLAIM_OPS_STATUSES].map((s) => (
+            <button
+              key={s ?? "all"}
+              onClick={() => { setOpsStatus(s); setOffset(0); }}
+              style={{
+                fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
+                color: opsStatus === s ? "#fff" : TEXT_SEC,
+                background: opsStatus === s ? INDIGO : "rgba(255,255,255,0.55)",
+                border: opsStatus === s ? "none" : "1px solid rgba(26,16,53,0.12)",
+              }}
+            >
+              {s ? s[0].toUpperCase() + s.slice(1) : "All"}
+            </button>
+          ))}
+        </div>
+        <button
+          disabled={exporting}
+          onClick={async () => {
+            setExporting(true);
+            try {
+              const blob = await adminApi.exportClaimsCsv(token, opsStatus);
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = "tetapi-claims.csv";
+              a.click();
+              URL.revokeObjectURL(a.href);
+            } catch { alert("Export failed"); }
+            finally { setExporting(false); }
+          }}
+          style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer", fontFamily: "inherit" }}
+        >
+          {exporting ? "Exporting…" : "⬇ Export CSV"}
+        </button>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
         <thead><tr>
-          <th style={th}>#</th><th style={th}>Email</th><th style={th}>Type</th><th style={th}>Ready to pay</th><th style={th}>Source</th><th style={th}>Date</th>
+          <th style={th}>#</th><th style={th}>Email</th><th style={th}>Type</th><th style={th}>Status</th><th style={th}>Source</th><th style={th}>Date</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {data?.results.map((c) => (
@@ -739,13 +782,36 @@ function ClaimsTab({ token }: { token: string }) {
               <td style={{ ...td, fontFamily: "ui-monospace,monospace" }}>{c.position}</td>
               <td style={td}>{c.email}</td>
               <td style={td}>{c.entity_type}</td>
-              <td style={td}>{c.ready_to_pay ? <Badge text="FOUNDING LOCKED" color={SUN} /> : <span style={{ color: MUTED }}>—</span>}</td>
+              <td style={td}>
+                {c.ops_status ? <Badge text={c.ops_status.toUpperCase()} color={OPS_STATUS_COLOR[c.ops_status] ?? MUTED} /> : <span style={{ color: MUTED }}>new</span>}
+                {c.ready_to_pay && <span style={{ marginLeft: 6 }}><Badge text="FOUNDING LOCKED" color={SUN} /></span>}
+              </td>
               <td style={{ ...td, fontSize: 12, color: TEXT_SEC }}>{c.source?.utm_source ?? c.source?.referrer ?? "—"}</td>
               <td style={td}>{fmtDate(c.created_at)}</td>
+              <td style={td}>
+                <select
+                  disabled={updating === c.id}
+                  value=""
+                  onChange={async (e) => {
+                    const next = e.target.value;
+                    if (!next) return;
+                    setUpdating(c.id);
+                    try { await adminApi.updateClaimStatus(token, c.id, next); load(); }
+                    catch { alert("Status update failed"); }
+                    finally { setUpdating(null); }
+                  }}
+                  style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid rgba(26,16,53,0.14)", background: "rgba(255,255,255,0.7)", color: TEXT_SEC, fontFamily: "inherit" }}
+                >
+                  <option value="">Mark as…</option>
+                  {CLAIM_OPS_STATUSES.filter((s) => s !== c.ops_status).map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </td>
             </tr>
           ))}
           {data && data.results.length === 0 && (
-            <tr><td style={{ ...td, color: MUTED }} colSpan={6}>No claims yet.</td></tr>
+            <tr><td style={{ ...td, color: MUTED }} colSpan={7}>No claims yet.</td></tr>
           )}
         </tbody>
       </table>

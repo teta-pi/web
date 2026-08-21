@@ -192,10 +192,27 @@ export const adminApi = {
   userDetail: (token: string, id: string) =>
     request<AdminUserDetail>(`/admin/users/${id}`, {}, token),
 
-  claims: (token: string, params: { offset?: number } = {}) => {
+  claims: (token: string, params: { offset?: number; ops_status?: string } = {}) => {
     const qs = new URLSearchParams();
     if (params.offset) qs.set("offset", String(params.offset));
+    if (params.ops_status) qs.set("ops_status", params.ops_status);
     return request<{ total: number; results: AdminClaim[] }>(`/admin/claims?${qs}`, {}, token);
+  },
+
+  updateClaimStatus: (token: string, id: string, opsStatus: string) =>
+    request<AdminClaim>(`/admin/claims/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ ops_status: opsStatus }),
+    }, token),
+
+  exportClaimsCsv: async (token: string, opsStatus?: string) => {
+    const qs = new URLSearchParams();
+    if (opsStatus) qs.set("ops_status", opsStatus);
+    const res = await fetch(`${API_BASE}/api/v1/admin/claims/export?${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`export failed: ${res.status}`);
+    return res.blob();
   },
 
   entities: (token: string, params: { q?: string; offset?: number } = {}) => {
@@ -266,6 +283,8 @@ export interface AdminClaim {
   email: string;
   entity_type: string;
   ready_to_pay: boolean;
+  ops_status: string | null;
+  ops_status_updated_at: string | null;
   source: Record<string, string | null> | null;
   created_at: string;
 }
