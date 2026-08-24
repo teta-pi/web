@@ -11,23 +11,19 @@ import { useOnboardingStore } from "@/stores/useOnboardingStore";
 import { type EntityKind, entityTypeForKind, isPersonKind } from "@/lib/types";
 import { searchApi, authApi, businessApi, claimApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/useAuthStore";
+import {
+  GR_INK, GR_BODY, GR_MUTED, GR_PRIMARY, GR_PRIMARY_HOVER,
+  GR_TINT, GR_LILAC, GR_ORANGE, GR_BORDER, GR_RAISED, GR_MONO_FONT,
+} from "@/components/GridOfRecord";
 
-/* ── Design tokens ── */
-const INDIGO = "#5B45C9";
-const SUN = "#F59A2E";
-const TEXT = "#1A1035";
-const TEXT_SEC = "#5A4F78";
-const TEXT_AUTH = "#3A2C5C";
-const MUTED = "#9991AC";
-const DOT = "#C9C2D8";
-
-/* ── Wordmark ── */
+/* ── Wordmark — same local pattern as page.tsx / profile / search / e/[slug]
+   (3.15f, 3.16a), colors match the shared ui/Wordmark.tsx exactly ── */
 function Wordmark() {
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 7, cursor: "pointer", userSelect: "none" }}>
-      <span style={{ fontSize: 20, fontWeight: 700, color: INDIGO, lineHeight: 1, letterSpacing: -0.5 }}>Θ</span>
-      <span style={{ fontSize: 15, fontWeight: 300, color: TEXT, lineHeight: 1 }}>+</span>
-      <span style={{ fontSize: 18, fontWeight: 700, color: SUN, lineHeight: 1 }}>π</span>
+      <span style={{ fontSize: 20, fontWeight: 700, color: GR_PRIMARY, lineHeight: 1, letterSpacing: -0.5 }}>Θ</span>
+      <span style={{ fontSize: 15, fontWeight: 300, color: GR_INK, lineHeight: 1 }}>+</span>
+      <span style={{ fontSize: 18, fontWeight: 700, color: GR_ORANGE, lineHeight: 1 }}>π</span>
     </div>
   );
 }
@@ -42,13 +38,14 @@ function useViewport() {
   return vw;
 }
 
-/* ── Glass container shared wrapper ── */
+/* ── Shared page wrapper — same flat background as /profile, /search,
+   /e/[slug] (no glass blur washes) ── */
 function PageShell({ children, m }: { children: React.ReactNode; m: boolean }) {
   return (
     <div style={{
       minHeight: "100vh",
       background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 50%,#EDF1FB 100%)",
-      color: TEXT,
+      color: GR_INK,
       position: "relative",
       // "clip", not "hidden" — see page.tsx (home) for why: this wizard's own
       // step transitions change content height enough to trigger it (phantom
@@ -56,9 +53,6 @@ function PageShell({ children, m }: { children: React.ReactNode; m: boolean }) {
       overflow: "clip",
       fontFamily: "'Manrope','Trebuchet MS','Segoe UI',sans-serif",
     }}>
-      {/* Color washes */}
-      <div style={{ position: "absolute", top: -160, left: -130, width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,rgba(91,69,201,0.22),transparent 68%)", filter: "blur(34px)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", bottom: -180, right: -150, width: 560, height: 560, borderRadius: "50%", background: "radial-gradient(circle,rgba(245,154,46,0.18),transparent 68%)", filter: "blur(38px)", pointerEvents: "none" }} />
       <div style={{ position: "relative", zIndex: 1 }}>
         <Link href="/" style={{ position: "fixed", top: `calc(var(--banner-h) + ${m ? 16 : 26}px)`, left: m ? 16 : 30, zIndex: 20, textDecoration: "none" }}>
           <Wordmark />
@@ -69,7 +63,8 @@ function PageShell({ children, m }: { children: React.ReactNode; m: boolean }) {
   );
 }
 
-/* ── Primary button ── */
+/* ── Primary button — flat GR_PRIMARY, square corners (matches the
+   BlockDetailModal / search-page CTA pattern), no gradient or shadow ── */
 function BtnPrimary({ children, onClick, disabled, style }: {
   children: React.ReactNode; onClick?: () => void;
   disabled?: boolean; style?: React.CSSProperties;
@@ -78,16 +73,17 @@ function BtnPrimary({ children, onClick, disabled, style }: {
     <button
       onClick={onClick}
       disabled={disabled}
+      onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
+      onMouseLeave={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
-        padding: "13px 24px", borderRadius: 11,
-        background: disabled ? "rgba(26,16,53,0.08)" : `linear-gradient(180deg,#6E58D6,${INDIGO})`,
-        color: disabled ? MUTED : "#fff",
+        padding: "13px 24px", borderRadius: 4,
+        background: disabled ? GR_TINT : GR_PRIMARY,
+        color: disabled ? GR_MUTED : "#fff",
         fontSize: 15, fontWeight: 600, border: "none",
         cursor: disabled ? "default" : "pointer",
         fontFamily: "inherit",
-        boxShadow: disabled ? "none" : "0 6px 18px rgba(91,69,201,0.30), inset 0 1px 0 rgba(255,255,255,0.3)",
-        transition: "opacity 0.16s",
+        transition: "background 0.16s",
         ...style,
       }}
     >{children}</button>
@@ -99,7 +95,7 @@ function MailIcon({ size = 18 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>;
 }
 function SearchIcon({ size = 20 }: { size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={INDIGO} strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={GR_PRIMARY} strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>;
 }
 
 /* ── Step 0 type picker ── */
@@ -228,9 +224,9 @@ export default function ClaimPage() {
           textAlign: "center",
         }}>
           <div style={{
-            fontFamily: "ui-monospace,'SF Mono','Menlo',monospace",
+            fontFamily: GR_MONO_FONT,
             fontSize: 11.5, letterSpacing: "1.4px", textTransform: "uppercase",
-            color: MUTED, marginBottom: 26,
+            color: GR_MUTED, marginBottom: 26,
           }}>For businesses · journalists · actors · creators</div>
 
           <div style={{
@@ -243,7 +239,7 @@ export default function ClaimPage() {
 
           <div style={{
             fontSize: 17, fontWeight: 300, lineHeight: 1.6,
-            color: TEXT_SEC, maxWidth: 480, marginBottom: 44,
+            color: GR_BODY, maxWidth: 480, marginBottom: 44,
           }}>
             Create your page in a minute — free, no registry needed. Add proof (registry,
             domain, business email, C2PA media) whenever you&apos;re ready.
@@ -263,22 +259,17 @@ export default function ClaimPage() {
                   onClick={() => { setTopKind(top); store.setEntityKind(SUB_KINDS[top][0].kind); }}
                   style={{
                     textAlign: "left",
-                    background: active ? "rgba(255,255,255,0.78)" : "rgba(255,255,255,0.5)",
-                    border: active ? `1px solid ${INDIGO}` : "1px solid rgba(255,255,255,0.7)",
-                    borderRadius: 18,
+                    background: active ? GR_TINT : "#fff",
+                    border: active ? `1px solid ${GR_PRIMARY}` : `1px solid ${GR_BORDER}`,
+                    borderRadius: 0,
                     padding: "22px 24px",
                     cursor: "pointer", fontFamily: "inherit",
-                    boxShadow: active
-                      ? "0 12px 34px rgba(91,69,201,0.18), inset 0 1px 0 rgba(255,255,255,0.9)"
-                      : "0 8px 26px rgba(45,55,120,0.08), inset 0 1px 0 rgba(255,255,255,0.85)",
-                    backdropFilter: "blur(14px) saturate(140%)",
-                    WebkitBackdropFilter: "blur(14px) saturate(140%)",
-                    transition: "box-shadow 0.15s, border 0.15s, background 0.15s",
+                    transition: "border 0.15s, background 0.15s",
                   }}
                 >
-                  <div style={{ fontSize: 15, fontWeight: 600, color: TEXT, marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontSize: 12, color: MUTED, marginBottom: 10 }}>{sub}</div>
-                  <div style={{ fontSize: 13, color: TEXT_SEC, lineHeight: 1.5 }}>{detail}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: GR_INK, marginBottom: 3 }}>{label}</div>
+                  <div style={{ fontSize: 12, color: GR_MUTED, marginBottom: 10 }}>{sub}</div>
+                  <div style={{ fontSize: 13, color: GR_BODY, lineHeight: 1.5 }}>{detail}</div>
                 </button>
               );
             })}
@@ -288,9 +279,9 @@ export default function ClaimPage() {
           {topKind && (
             <div style={{ width: "100%", maxWidth: 640, marginBottom: 36 }}>
               <div style={{
-                fontFamily: "ui-monospace,'SF Mono','Menlo',monospace",
+                fontFamily: GR_MONO_FONT,
                 fontSize: 10.5, letterSpacing: "0.6px", textTransform: "uppercase",
-                color: MUTED, marginBottom: 12, textAlign: "left",
+                color: GR_MUTED, marginBottom: 12, textAlign: "left",
               }}>
                 {topKind === "person" ? "What kind of person?" : "What kind of entity?"}
               </div>
@@ -303,16 +294,16 @@ export default function ClaimPage() {
                       onClick={() => store.setEntityKind(kind)}
                       title={hint}
                       style={{
-                        textAlign: "left", padding: "10px 16px", borderRadius: 11,
-                        border: active ? `1px solid ${INDIGO}` : "1px solid rgba(26,16,53,0.12)",
-                        background: active ? "rgba(91,69,201,0.06)" : "rgba(255,255,255,0.45)",
-                        color: active ? TEXT : TEXT_SEC,
+                        textAlign: "left", padding: "10px 16px", borderRadius: 0,
+                        border: active ? `1px solid ${GR_PRIMARY}` : `1px solid ${GR_BORDER}`,
+                        background: active ? GR_TINT : "#fff",
+                        color: active ? GR_INK : GR_BODY,
                         cursor: "pointer", fontFamily: "inherit",
                         transition: "border 0.15s, background 0.15s",
                       }}
                     >
                       <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
-                      <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>{hint}</div>
+                      <div style={{ fontSize: 11.5, color: GR_MUTED, marginTop: 2 }}>{hint}</div>
                     </button>
                   );
                 })}
@@ -327,18 +318,18 @@ export default function ClaimPage() {
             </div>
           )}
 
-          <Link href="/login" style={{ fontSize: 13.5, color: TEXT_SEC, textDecoration: "none" }}>
+          <Link href="/login" style={{ fontSize: 13.5, color: GR_BODY, textDecoration: "none" }}>
             Already verified? Sign in
           </Link>
 
           <div style={{
             marginTop: 52,
-            fontFamily: "ui-monospace,'SF Mono','Menlo',monospace",
-            fontSize: 11, color: MUTED, letterSpacing: "0.4px",
+            fontFamily: GR_MONO_FONT,
+            fontSize: 11, color: GR_MUTED, letterSpacing: "0.4px",
             display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center",
           }}>
-            <span>registry:attested</span><span style={{ color: DOT }}>·</span>
-            <span>c2pa:verified</span><span style={{ color: DOT }}>·</span>
+            <span>registry:attested</span><span style={{ color: GR_LILAC }}>·</span>
+            <span>c2pa:verified</span><span style={{ color: GR_LILAC }}>·</span>
             <span>btc:ts:confirmed</span>
           </div>
         </div>
@@ -351,7 +342,7 @@ export default function ClaimPage() {
     const stepIndex = store.step - 1;
     const progressPct = `${(store.step / STEP_LABELS.length) * 100}%`;
     const trustChipLabel = store.authed ? "Email verified" : "Unverified — free to create";
-    const trustChipColor = store.authed ? INDIGO : MUTED;
+    const trustChipColor = store.authed ? GR_PRIMARY : GR_MUTED;
 
     return (
       <PageShell m={m}>
@@ -362,23 +353,23 @@ export default function ClaimPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: store.authed ? trustChipColor : "transparent", border: `1px solid ${trustChipColor}` }} />
-                <span style={{ fontSize: 12.5, color: TEXT_AUTH, letterSpacing: "0.2px" }}>{trustChipLabel}</span>
+                <span style={{ fontSize: 12.5, color: GR_BODY, letterSpacing: "0.2px" }}>{trustChipLabel}</span>
               </span>
-              <span style={{ fontFamily: "ui-monospace,'SF Mono','Menlo',monospace", fontSize: 11, color: MUTED, letterSpacing: "0.6px" }}>
+              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, color: GR_MUTED, letterSpacing: "0.6px" }}>
                 STEP {store.step} / {STEP_LABELS.length}
               </span>
             </div>
-            <div style={{ height: 2, background: "rgba(26,16,53,0.07)", borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: progressPct, background: INDIGO, borderRadius: 2, transition: "width 0.35s ease" }} />
+            <div style={{ height: 2, background: GR_BORDER, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: progressPct, background: GR_PRIMARY, transition: "width 0.35s ease" }} />
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 11 }}>
               {STEP_LABELS.map((label, i) => {
                 const done = i < stepIndex, active = i === stepIndex;
                 return (
                   <span key={label} style={{
-                    fontFamily: "ui-monospace,'SF Mono','Menlo',monospace",
+                    fontFamily: GR_MONO_FONT,
                     fontSize: m ? 9 : 10.5, letterSpacing: "0.3px",
-                    color: active ? INDIGO : done ? TEXT_AUTH : MUTED,
+                    color: active ? GR_PRIMARY : done ? GR_BODY : GR_MUTED,
                     fontWeight: active ? 700 : 400,
                   }}>{label}</span>
                 );
@@ -390,7 +381,7 @@ export default function ClaimPage() {
           {!store.authed && (
             <div
               onClick={() => store.setStep((store.step - 1) as 0 | 1 | 2 | 3 | 4)}
-              style={{ fontSize: 13, color: MUTED, cursor: "pointer", marginBottom: 32, display: "inline-flex", alignItems: "center", gap: 6 }}
+              style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer", marginBottom: 32, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               ← Back
             </div>
@@ -402,7 +393,7 @@ export default function ClaimPage() {
               <div style={{ fontSize: m ? 26 : 32, fontWeight: 600, letterSpacing: "-0.7px", lineHeight: 1.12, marginBottom: 8 }}>
                 {isPerson ? "What's your name?" : "What's it called?"}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 300, lineHeight: 1.55, color: TEXT_SEC, marginBottom: 28 }}>
+              <div style={{ fontSize: 16, fontWeight: 300, lineHeight: 1.55, color: GR_BODY, marginBottom: 28 }}>
                 {store.entityKind === "business"
                   ? "The name people know you by — brand or legal name, either works. You can add an official registry match later."
                   : store.entityKind === "organization"
@@ -418,9 +409,8 @@ export default function ClaimPage() {
               <div style={{
                 display: "flex", alignItems: "center", gap: 14,
                 padding: "15px 18px",
-                border: "1px solid rgba(26,16,53,0.12)", borderRadius: 13,
-                background: "rgba(91,69,201,0.025)",
-                backdropFilter: "blur(8px)",
+                border: `1px solid ${GR_BORDER}`, borderRadius: 0,
+                background: "#fff",
                 marginBottom: 20,
               }}>
                 <SearchIcon size={20} />
@@ -428,13 +418,13 @@ export default function ClaimPage() {
                   value={store.query}
                   onChange={(e) => store.setQuery(e.target.value)}
                   placeholder={isPerson ? "Your name or username…" : "Name…"}
-                  style={{ flex: 1, border: "none", background: "transparent", fontSize: 17, color: TEXT, fontFamily: "inherit" }}
+                  style={{ flex: 1, border: "none", background: "transparent", fontSize: 17, color: GR_INK, fontFamily: "inherit" }}
                 />
               </div>
 
               <div style={{ marginBottom: 20, minHeight: 20 }}>
                 {nameCheck === "checking" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, color: MUTED, fontSize: 13 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, color: GR_MUTED, fontSize: 13 }}>
                     <SpinnerIcon size={14} /> Checking availability…
                   </div>
                 )}
@@ -444,14 +434,14 @@ export default function ClaimPage() {
                   </div>
                 )}
                 {nameCheck === "taken" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, color: SUN, fontSize: 13 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, color: GR_ORANGE, fontSize: 13 }}>
                     {isPerson
                       ? "✗ This name is already taken — try a different one"
                       : "! Someone already uses this name — you can still continue, then prove control."}
                   </div>
                 )}
                 {nameCheck === "idle" && (
-                  <div style={{ fontSize: 12, color: MUTED }}>
+                  <div style={{ fontSize: 12, color: GR_MUTED }}>
                     This name will appear on your verified profile.
                   </div>
                 )}
@@ -474,33 +464,33 @@ export default function ClaimPage() {
           {store.step === 2 && store.entity && (
             <div style={{ maxWidth: 420 }}>
               <div style={{ fontSize: m ? 26 : 32, fontWeight: 600, letterSpacing: "-0.8px", marginBottom: 8 }}>Verify your email.</div>
-              <div style={{ fontSize: 15, color: TEXT_SEC, marginBottom: 28, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 15, color: GR_BODY, marginBottom: 28, lineHeight: 1.5 }}>
                 We&apos;ll send a code to confirm you&apos;re real. This is your account — and your
                 page goes live as soon as it&apos;s confirmed.
               </div>
 
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 20, background: `rgba(91,69,201,0.08)`, marginBottom: 28, fontSize: 14, fontWeight: 600, color: TEXT_AUTH }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: INDIGO }} />
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 0, border: `1px solid ${GR_BORDER}`, background: GR_TINT, marginBottom: 28, fontSize: 14, fontWeight: 600, color: GR_INK }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: GR_PRIMARY }} />
                 {store.entity.name}
               </div>
 
               {!emailCodeSent ? (
                 <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", border: "1px solid rgba(26,16,53,0.12)", borderRadius: 9, marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", border: `1px solid ${GR_BORDER}`, borderRadius: 0, marginBottom: 14 }}>
                     <MailIcon size={18} />
                     <input
                       value={emailInput}
                       onChange={(e) => { setEmailInput(e.target.value); setEmailError(""); }}
                       placeholder="your@email.com"
                       type="email"
-                      style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontSize: 15, color: TEXT, fontFamily: "inherit" }}
+                      style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontSize: 15, color: GR_INK, fontFamily: "inherit" }}
                     />
                   </div>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: TEXT_SEC, lineHeight: 1.5, marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: GR_BODY, lineHeight: 1.5, marginBottom: 14 }}>
                     <CheckCircleIcon size={14} />
                     <span>Join early access — be first on the registry.</span>
                   </div>
-                  {emailError && <div style={{ color: SUN, fontSize: 13, marginBottom: 10 }}>{emailError}</div>}
+                  {emailError && <div style={{ color: GR_ORANGE, fontSize: 13, marginBottom: 10 }}>{emailError}</div>}
                   <BtnPrimary
                     disabled={!emailInput.includes("@") || emailLoading}
                     style={{ width: "100%" }}
@@ -518,14 +508,14 @@ export default function ClaimPage() {
                   </BtnPrimary>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "18px 0" }}>
-                    <div style={{ flex: 1, height: 1, background: "rgba(26,16,53,0.08)" }} />
-                    <span style={{ fontSize: 12, color: MUTED }}>or</span>
-                    <div style={{ flex: 1, height: 1, background: "rgba(26,16,53,0.08)" }} />
+                    <div style={{ flex: 1, height: 1, background: GR_BORDER }} />
+                    <span style={{ fontSize: 12, color: GR_MUTED }}>or</span>
+                    <div style={{ flex: 1, height: 1, background: GR_BORDER }} />
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
                     {[
-                      { label: "Continue with Google", icon: <span style={{ width: 20, height: 20, borderRadius: "50%", border: "1px solid rgba(26,16,53,0.25)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: TEXT_AUTH, flexShrink: 0 }}>G</span> },
+                      { label: "Continue with Google", icon: <span style={{ width: 20, height: 20, borderRadius: "50%", border: `1px solid ${GR_BORDER}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: GR_BODY, flexShrink: 0 }}>G</span> },
                       { label: "Continue with a passkey", icon: <PasskeyIcon size={18} /> },
                     ].map(({ label, icon }) => (
                       <button
@@ -535,20 +525,20 @@ export default function ClaimPage() {
                         style={{
                           width: "100%", display: "flex", alignItems: "center", gap: 12,
                           padding: "13px 18px",
-                          border: "1px solid rgba(26,16,53,0.14)", borderRadius: 11,
-                          background: "transparent", fontSize: 14.5, fontWeight: 600, color: TEXT_AUTH,
+                          border: `1px solid ${GR_BORDER}`, borderRadius: 0,
+                          background: "transparent", fontSize: 14.5, fontWeight: 600, color: GR_BODY,
                           cursor: "not-allowed", fontFamily: "inherit", textAlign: "left", opacity: 0.6,
                         }}
                       >
                         {icon} {label}
-                        <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 400, color: "#B8B2C8" }}>soon</span>
+                        <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 400, color: GR_MUTED }}>soon</span>
                       </button>
                     ))}
                   </div>
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 13.5, color: TEXT_SEC, marginBottom: 14 }}>
+                  <div style={{ fontSize: 13.5, color: GR_BODY, marginBottom: 14 }}>
                     Code sent to <strong>{emailInput}</strong>
                   </div>
                   <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
@@ -558,10 +548,10 @@ export default function ClaimPage() {
                       placeholder="· · · · · ·"
                       maxLength={6}
                       style={{
-                        width: 160, fontFamily: "ui-monospace,'SF Mono','Menlo',monospace",
+                        width: 160, fontFamily: GR_MONO_FONT,
                         fontSize: 22, letterSpacing: "8px", padding: "10px 14px",
-                        border: "1px solid rgba(26,16,53,0.12)", borderRadius: 9,
-                        background: "transparent", color: TEXT,
+                        border: `1px solid ${GR_BORDER}`, borderRadius: 0,
+                        background: "transparent", color: GR_INK,
                       }}
                     />
                     <BtnPrimary
@@ -585,14 +575,14 @@ export default function ClaimPage() {
                       {emailLoading ? <><SpinnerIcon size={14} /> Checking…</> : "Verify →"}
                     </BtnPrimary>
                   </div>
-                  {emailError && <div style={{ color: SUN, fontSize: 13 }}>{emailError}</div>}
-                  <span onClick={() => { setEmailCodeSent(false); setEmailCode(""); }} style={{ fontSize: 13, color: MUTED, cursor: "pointer" }}>
+                  {emailError && <div style={{ color: GR_ORANGE, fontSize: 13 }}>{emailError}</div>}
+                  <span onClick={() => { setEmailCodeSent(false); setEmailCode(""); }} style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}>
                     Resend or change email
                   </span>
                 </>
               )}
               <div style={{ marginTop: 20 }}>
-                <span onClick={() => store.setStep(1)} style={{ fontSize: 13, color: MUTED, cursor: "pointer" }}>← Change name</span>
+                <span onClick={() => store.setStep(1)} style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}>← Change name</span>
               </div>
             </div>
           )}
@@ -610,56 +600,56 @@ export default function ClaimPage() {
           alignItems: "center", justifyContent: "center",
           padding: m ? "80px 24px" : "80px 40px", textAlign: "center",
         }}>
-          <CheckCircleIcon size={46} color={INDIGO} />
+          <CheckCircleIcon size={46} color={GR_PRIMARY} />
 
           <div style={{ fontSize: m ? 36 : 48, fontWeight: 600, letterSpacing: "-1px", lineHeight: 1.05, marginTop: 24, marginBottom: 10 }}>
             You&apos;re live.
           </div>
-          <div style={{ fontSize: 16, fontWeight: 300, lineHeight: 1.6, color: TEXT_SEC, maxWidth: 440, marginBottom: 30 }}>
+          <div style={{ fontSize: 16, fontWeight: 300, lineHeight: 1.6, color: GR_BODY, maxWidth: 440, marginBottom: 30 }}>
             {store.entity?.name ?? "Your identity"} is now on TETA+PI.
           </div>
 
           {/* Summary card */}
           <div style={{
             width: "100%", maxWidth: 440,
-            border: "1px solid rgba(26,16,53,0.10)",
-            borderLeft: "3px solid #B8B2C8",
-            borderRadius: "0 13px 13px 0",
+            border: `1px solid ${GR_BORDER}`,
+            borderLeft: `3px solid ${GR_LILAC}`,
+            borderRadius: 0,
             padding: "18px 20px",
-            background: "rgba(91,69,201,0.015)",
+            background: GR_RAISED,
             textAlign: "left", marginBottom: 28,
           }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: TEXT, letterSpacing: "-0.2px" }}>
+              <span style={{ fontSize: 16, fontWeight: 600, color: GR_INK, letterSpacing: "-0.2px" }}>
                 {store.entity?.name ?? "Your identity"}
               </span>
-              <span style={{ fontFamily: "ui-monospace,'SF Mono','Menlo',monospace", fontSize: 9.5, letterSpacing: "1.1px", textTransform: "uppercase", color: "#B8B2C8" }}>
+              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, letterSpacing: "1.1px", textTransform: "uppercase", color: GR_MUTED }}>
                 Email Verified
               </span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10, fontSize: 12, color: MUTED }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10, fontSize: 12, color: GR_MUTED }}>
               <span>{store.accountEmail || "—"}</span>
-              {creating && <><span style={{ color: DOT }}>·</span><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><SpinnerIcon size={11} /> Saving profile…</span></>}
-              {store.createdEntityId && <><span style={{ color: DOT }}>·</span><span style={{ color: "#22B07D" }}>✓ Profile saved</span></>}
-              {store.paired && <><span style={{ color: DOT }}>·</span><span style={{ color: INDIGO }}>✓ PI Camera linked</span></>}
+              {creating && <><span style={{ color: GR_LILAC }}>·</span><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><SpinnerIcon size={11} /> Saving profile…</span></>}
+              {store.createdEntityId && <><span style={{ color: GR_LILAC }}>·</span><span style={{ color: "#22B07D" }}>✓ Profile saved</span></>}
+              {store.paired && <><span style={{ color: GR_LILAC }}>·</span><span style={{ color: GR_PRIMARY }}>✓ PI Camera linked</span></>}
             </div>
-            {createError && <div style={{ marginTop: 10, fontSize: 12.5, color: SUN }}>{createError}</div>}
+            {createError && <div style={{ marginTop: 10, fontSize: 12.5, color: GR_ORANGE }}>{createError}</div>}
           </div>
 
           {/* Maturity strip */}
           <div style={{
-            fontFamily: "ui-monospace,'SF Mono','Menlo',monospace",
+            fontFamily: GR_MONO_FONT,
             fontSize: 11, display: "flex", gap: 10, alignItems: "center",
             marginBottom: 32, flexWrap: "wrap", justifyContent: "center",
           }}>
-            <span style={{ color: "#B8B2C8" }}>● Email Verified</span>
-            <span style={{ color: DOT }}>→</span>
-            <span style={{ color: MUTED }}>○ {isPerson ? "C2PA Media" : "Registry / Domain"}</span>
-            <span style={{ color: DOT }}>→</span>
-            <span style={{ color: MUTED }}>○ Full</span>
+            <span style={{ color: GR_MUTED }}>● Email Verified</span>
+            <span style={{ color: GR_LILAC }}>→</span>
+            <span style={{ color: GR_MUTED }}>○ {isPerson ? "C2PA Media" : "Registry / Domain"}</span>
+            <span style={{ color: GR_LILAC }}>→</span>
+            <span style={{ color: GR_MUTED }}>○ Full</span>
           </div>
 
-          <div style={{ fontSize: 14, color: TEXT_SEC, maxWidth: 380, lineHeight: 1.55, marginBottom: 28 }}>
+          <div style={{ fontSize: 14, color: GR_BODY, maxWidth: 380, lineHeight: 1.55, marginBottom: 28 }}>
             {isPerson
               ? "Add C2PA-signed media with PI Camera to reach Full verification — the highest trust level."
               : "Add proof from your profile — official registry match, domain ownership, or business email — to raise your trust level."}
@@ -672,12 +662,13 @@ export default function ClaimPage() {
               if (store.createdEntityId) localStorage.setItem("entity_id", store.createdEntityId);
               if (store.entityKind) localStorage.setItem("entity_kind", store.entityKind);
             }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
             style={{
               display: "inline-flex", alignItems: "center", gap: 9,
-              padding: "14px 26px", borderRadius: 11,
-              background: `linear-gradient(180deg,#6E58D6,${INDIGO})`,
+              padding: "14px 26px", borderRadius: 4,
+              background: GR_PRIMARY,
               color: "#fff", fontSize: 15, fontWeight: 600, textDecoration: "none",
-              boxShadow: "0 8px 24px rgba(91,69,201,0.34), inset 0 1px 0 rgba(255,255,255,0.3)",
             }}
           >
             Build your profile →
