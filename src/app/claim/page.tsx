@@ -636,7 +636,11 @@ export default function ClaimPage() {
             {createError && <div style={{ marginTop: 10, fontSize: 12.5, color: GR_ORANGE }}>{createError}</div>}
           </div>
 
-          {/* Maturity strip */}
+          {/* Maturity strip — registry match isn't business-only (3.23: a
+              person-kind entity can carry a real verified registry_status
+              too, e.g. a sole proprietor's name found in Handelsregister),
+              so the person path names it alongside C2PA instead of implying
+              it isn't available. */}
           <div style={{
             fontFamily: GR_MONO_FONT,
             fontSize: 11, display: "flex", gap: 10, alignItems: "center",
@@ -644,14 +648,14 @@ export default function ClaimPage() {
           }}>
             <span style={{ color: GR_MUTED }}>● Email Verified</span>
             <span style={{ color: GR_LILAC }}>→</span>
-            <span style={{ color: GR_MUTED }}>○ {isPerson ? "C2PA Media" : "Registry / Domain"}</span>
+            <span style={{ color: GR_MUTED }}>○ {isPerson ? "Registry / C2PA Media" : "Registry / Domain"}</span>
             <span style={{ color: GR_LILAC }}>→</span>
             <span style={{ color: GR_MUTED }}>○ Full</span>
           </div>
 
           <div style={{ fontSize: 14, color: GR_BODY, maxWidth: 380, lineHeight: 1.55, marginBottom: 28 }}>
             {isPerson
-              ? "Add C2PA-signed media with PI Camera to reach Full verification — the highest trust level."
+              ? "Add proof from your profile — official registry match, domain ownership, or C2PA-signed media via PI Camera — to raise your trust level."
               : "Add proof from your profile — official registry match, domain ownership, or business email — to raise your trust level."}
           </div>
 
