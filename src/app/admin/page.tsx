@@ -13,19 +13,26 @@ import {
   AdminProductMetrics,
   AdminHealthCheck,
 } from "@/lib/api";
+import {
+  GR_INK, GR_BODY, GR_MUTED, GR_PRIMARY, GR_PRIMARY_HOVER,
+  GR_TINT, GR_LILAC, GR_ORANGE, GR_BORDER, GR_MONO_FONT,
+} from "@/components/GridOfRecord";
 
-const INDIGO = "#5B45C9";
-const SUN = "#F59A2E";
-const TEXT = "#1A1035";
-const TEXT_SEC = "#5A4F78";
-const MUTED = "#9088B0";
 const TOKEN_KEY = "tetapi_admin_token";
 
-const glass: React.CSSProperties = {
-  background: "rgba(255,255,255,0.55)",
-  border: "1px solid rgba(255,255,255,0.7)",
-  borderRadius: 16,
-  boxShadow: "0 8px 30px rgba(45,55,120,0.10)",
+// Flat square card — same board pattern as /profile, /search, /e/[slug],
+// /claim, /login, /settings (no glass blur/gradient/shadow).
+const card: React.CSSProperties = {
+  background: "#fff",
+  border: `1px solid ${GR_BORDER}`,
+};
+
+// Secondary (outline) action button — same recipe used across the other
+// four restyled pages.
+const secondaryBtn: React.CSSProperties = {
+  fontSize: 12.5, fontWeight: 600, padding: "8px 14px",
+  border: `1px solid ${GR_LILAC}`, background: "transparent", color: GR_PRIMARY,
+  cursor: "pointer", fontFamily: "inherit",
 };
 
 type Tab = "dashboard" | "analytics" | "users" | "claims" | "entities" | "audit";
@@ -54,12 +61,12 @@ function AdminLogin({ onToken }: { onToken: (t: string) => void }) {
   const [error, setError] = useState("");
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 45%,#EDF1FB 100%)", fontFamily: "'Manrope',sans-serif", color: TEXT }}>
-      <div style={{ ...glass, padding: "40px 44px", width: 380 }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 45%,#EDF1FB 100%)", fontFamily: "'Manrope',sans-serif", color: GR_INK }}>
+      <div style={{ ...card, padding: "40px 44px", width: 380 }}>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
-          <span style={{ color: INDIGO }}>Θ</span>+<span style={{ color: SUN }}>π</span> · Back Office
+          <span style={{ color: GR_PRIMARY }}>Θ</span>+<span style={{ color: GR_ORANGE }}>π</span> · Back Office
         </div>
-        <div style={{ fontSize: 13.5, color: TEXT_SEC, marginBottom: 24 }}>Admin access only. All actions are audited.</div>
+        <div style={{ fontSize: 13.5, color: GR_BODY, marginBottom: 24 }}>Admin access only. All actions are audited.</div>
 
         {!sent ? (
           <>
@@ -68,35 +75,39 @@ function AdminLogin({ onToken }: { onToken: (t: string) => void }) {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@email"
               type="email"
-              style={{ width: "100%", height: 46, padding: "0 14px", fontSize: 14.5, border: "1px solid rgba(26,16,53,0.14)", borderRadius: 10, background: "rgba(255,255,255,0.7)", color: TEXT, fontFamily: "inherit", marginBottom: 12, boxSizing: "border-box" }}
+              style={{ width: "100%", height: 46, padding: "0 14px", fontSize: 14.5, border: `1px solid ${GR_BORDER}`, background: "#fff", color: GR_INK, fontFamily: "inherit", marginBottom: 12, boxSizing: "border-box" }}
             />
-            {error && <div style={{ color: SUN, fontSize: 13, marginBottom: 10 }}>{error}</div>}
+            {error && <div style={{ color: GR_ORANGE, fontSize: 13, marginBottom: 10 }}>{error}</div>}
             <button
               disabled={!email.includes("@") || busy}
+              onMouseEnter={(e) => { if (email.includes("@") && !busy) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
+              onMouseLeave={(e) => { if (email.includes("@") && !busy) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
               onClick={async () => {
                 setBusy(true); setError("");
                 try { await authApi.sendEmailCode(email.trim()); setSent(true); }
                 catch { setError("Could not send code."); }
                 finally { setBusy(false); }
               }}
-              style={{ width: "100%", height: 46, fontSize: 14.5, fontWeight: 600, color: "#fff", background: `linear-gradient(180deg,#6E58D6,${INDIGO})`, border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}
+              style={{ width: "100%", height: 46, fontSize: 14.5, fontWeight: 600, color: email.includes("@") ? "#fff" : GR_MUTED, background: email.includes("@") ? GR_PRIMARY : GR_TINT, border: "none", cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}
             >
               {busy ? "Sending…" : "Send code"}
             </button>
           </>
         ) : (
           <>
-            <div style={{ fontSize: 13, color: TEXT_SEC, marginBottom: 10 }}>Code sent to <strong>{email}</strong></div>
+            <div style={{ fontSize: 13, color: GR_BODY, marginBottom: 10 }}>Code sent to <strong>{email}</strong></div>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="······"
               maxLength={6}
-              style={{ width: "100%", height: 50, padding: "0 14px", fontSize: 22, letterSpacing: 8, fontFamily: "ui-monospace,'SF Mono',monospace", border: "1px solid rgba(26,16,53,0.14)", borderRadius: 10, background: "rgba(255,255,255,0.7)", color: TEXT, marginBottom: 12, boxSizing: "border-box", textAlign: "center" }}
+              style={{ width: "100%", height: 50, padding: "0 14px", fontSize: 22, letterSpacing: 8, fontFamily: GR_MONO_FONT, border: `1px solid ${GR_BORDER}`, background: "#fff", color: GR_INK, marginBottom: 12, boxSizing: "border-box", textAlign: "center" }}
             />
-            {error && <div style={{ color: SUN, fontSize: 13, marginBottom: 10 }}>{error}</div>}
+            {error && <div style={{ color: GR_ORANGE, fontSize: 13, marginBottom: 10 }}>{error}</div>}
             <button
               disabled={code.length < 6 || busy}
+              onMouseEnter={(e) => { if (code.length >= 6 && !busy) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY_HOVER; }}
+              onMouseLeave={(e) => { if (code.length >= 6 && !busy) (e.currentTarget as HTMLElement).style.background = GR_PRIMARY; }}
               onClick={async () => {
                 setBusy(true); setError("");
                 try {
@@ -109,11 +120,11 @@ function AdminLogin({ onToken }: { onToken: (t: string) => void }) {
                   setError(msg.includes("Admin") ? "This account has no admin access." : "Wrong or expired code.");
                 } finally { setBusy(false); }
               }}
-              style={{ width: "100%", height: 46, fontSize: 14.5, fontWeight: 600, color: "#fff", background: `linear-gradient(180deg,#6E58D6,${INDIGO})`, border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}
+              style={{ width: "100%", height: 46, fontSize: 14.5, fontWeight: 600, color: code.length >= 6 ? "#fff" : GR_MUTED, background: code.length >= 6 ? GR_PRIMARY : GR_TINT, border: "none", cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}
             >
               {busy ? "Checking…" : "Enter →"}
             </button>
-            <div onClick={() => { setSent(false); setCode(""); }} style={{ fontSize: 12.5, color: MUTED, cursor: "pointer", marginTop: 10, textAlign: "center" }}>
+            <div onClick={() => { setSent(false); setCode(""); }} style={{ fontSize: 12.5, color: GR_MUTED, cursor: "pointer", marginTop: 10, textAlign: "center" }}>
               Change email / resend
             </div>
           </>
@@ -139,14 +150,14 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
   }, [token]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 45%,#EDF1FB 100%)", fontFamily: "'Manrope',sans-serif", color: TEXT, padding: "28px 24px 60px" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg,#EEF2FC 0%,#FBFAF4 45%,#EDF1FB 100%)", fontFamily: "'Manrope',sans-serif", color: GR_INK, padding: "28px 24px 60px" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div style={{ fontSize: 19, fontWeight: 700 }}>
-            <span style={{ color: INDIGO }}>Θ</span>+<span style={{ color: SUN }}>π</span> · Back Office
+            <span style={{ color: GR_PRIMARY }}>Θ</span>+<span style={{ color: GR_ORANGE }}>π</span> · Back Office
           </div>
-          <button onClick={onLogout} style={{ fontSize: 13, color: TEXT_SEC, background: "none", border: "1px solid rgba(26,16,53,0.14)", borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={onLogout} style={{ fontSize: 13, color: GR_BODY, background: "#fff", border: `1px solid ${GR_BORDER}`, padding: "7px 14px", cursor: "pointer", fontFamily: "inherit" }}>
             Log out
           </button>
         </div>
@@ -160,19 +171,21 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
             <StatCard label="Verification events" value={stats.verification_events} sub="append-only · BTC-anchored" />
           </div>
         )}
-        {error && <div style={{ color: SUN, fontSize: 13, marginBottom: 16 }}>{error}</div>}
+        {error && <div style={{ color: GR_ORANGE, fontSize: 13, marginBottom: 16 }}>{error}</div>}
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {/* Tabs — segmented bar, same underline-accent pattern as /search's
+            filter tabs and /login's mode switch */}
+        <div style={{ display: "flex", flexWrap: "wrap", border: `1px solid ${GR_BORDER}`, background: "#fff", marginBottom: 16 }}>
           {(["dashboard", "analytics", "users", "claims", "entities", "audit"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               style={{
-                fontSize: 13.5, fontWeight: 600, padding: "8px 18px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
-                color: tab === t ? "#fff" : TEXT_SEC,
-                background: tab === t ? `linear-gradient(180deg,#6E58D6,${INDIGO})` : "rgba(255,255,255,0.55)",
-                border: tab === t ? "none" : "1px solid rgba(255,255,255,0.7)",
+                fontSize: 13, fontWeight: 600, padding: "10px 18px", cursor: "pointer", fontFamily: "inherit",
+                color: tab === t ? GR_INK : GR_BODY,
+                background: tab === t ? GR_TINT : "transparent",
+                boxShadow: tab === t ? `inset 0 -2px 0 0 ${GR_PRIMARY}` : "none",
+                border: "none", borderRight: `1px solid ${GR_BORDER}`,
               }}
             >
               {t === "dashboard" ? "Dashboard" : t === "analytics" ? "Analytics" : t === "users" ? "Users" : t === "claims" ? "Claims" : t === "entities" ? "Entities" : "Audit log"}
@@ -193,26 +206,26 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
 function StatCard({ label, value, sub, accent }: { label: string; value: number; sub: string; accent?: boolean }) {
   return (
-    <div style={{ ...glass, padding: "18px 20px", borderTop: accent ? `3px solid ${SUN}` : undefined }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", color: accent ? SUN : INDIGO, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 12, color: TEXT_SEC, marginTop: 8 }}>{sub}</div>
+    <div style={{ ...card, padding: "18px 20px", borderTop: accent ? `3px solid ${GR_ORANGE}` : undefined }}>
+      <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", color: accent ? GR_ORANGE : GR_PRIMARY, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 12, color: GR_BODY, marginTop: 8 }}>{sub}</div>
     </div>
   );
 }
 
 /* ── Shared table bits ─────────────────────────────────────────────────────── */
 
-const th: React.CSSProperties = { textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", color: MUTED, padding: "10px 14px", borderBottom: "1px solid rgba(26,16,53,0.08)" };
-const td: React.CSSProperties = { fontSize: 13.5, color: TEXT, padding: "11px 14px", borderBottom: "1px solid rgba(26,16,53,0.05)", verticalAlign: "top" };
+const th: React.CSSProperties = { textAlign: "left", fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: GR_MUTED, padding: "10px 14px", borderBottom: `1px solid ${GR_BORDER}` };
+const td: React.CSSProperties = { fontSize: 13.5, color: GR_INK, padding: "11px 14px", borderBottom: "1px solid #F1EDF9", verticalAlign: "top" };
 
 function Pager({ total, offset, onOffset, pageSize = 50 }: { total: number; offset: number; onOffset: (o: number) => void; pageSize?: number }) {
   if (total <= pageSize) return null;
   return (
-    <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 14px" }}>
-      <button disabled={offset === 0} onClick={() => onOffset(Math.max(0, offset - pageSize))} style={{ fontSize: 13, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(26,16,53,0.14)", background: "none", cursor: "pointer", fontFamily: "inherit", opacity: offset === 0 ? 0.4 : 1 }}>←</button>
-      <span style={{ fontSize: 12.5, color: MUTED }}>{offset + 1}–{Math.min(offset + pageSize, total)} of {total}</span>
-      <button disabled={offset + pageSize >= total} onClick={() => onOffset(offset + pageSize)} style={{ fontSize: 13, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(26,16,53,0.14)", background: "none", cursor: "pointer", fontFamily: "inherit", opacity: offset + pageSize >= total ? 0.4 : 1 }}>→</button>
+    <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 14px", borderTop: `1px solid ${GR_BORDER}` }}>
+      <button disabled={offset === 0} onClick={() => onOffset(Math.max(0, offset - pageSize))} style={{ fontSize: 13, padding: "5px 12px", border: `1px solid ${GR_BORDER}`, background: "#fff", cursor: "pointer", fontFamily: "inherit", opacity: offset === 0 ? 0.4 : 1 }}>←</button>
+      <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11.5, color: GR_MUTED }}>{offset + 1}–{Math.min(offset + pageSize, total)} of {total}</span>
+      <button disabled={offset + pageSize >= total} onClick={() => onOffset(offset + pageSize)} style={{ fontSize: 13, padding: "5px 12px", border: `1px solid ${GR_BORDER}`, background: "#fff", cursor: "pointer", fontFamily: "inherit", opacity: offset + pageSize >= total ? 0.4 : 1 }}>→</button>
     </div>
   );
 }
@@ -225,13 +238,15 @@ function SearchBox({ onSearch }: { onSearch: (q: string) => void }) {
       onChange={(e) => { setQ(e.target.value); }}
       onKeyDown={(e) => { if (e.key === "Enter") onSearch(q.trim()); }}
       placeholder="Search… (Enter)"
-      style={{ height: 38, padding: "0 14px", fontSize: 13.5, border: "1px solid rgba(26,16,53,0.12)", borderRadius: 10, background: "rgba(255,255,255,0.7)", color: TEXT, fontFamily: "inherit", width: 260 }}
+      style={{ height: 38, padding: "0 14px", fontSize: 13.5, border: `1px solid ${GR_BORDER}`, background: "#fff", color: GR_INK, fontFamily: "inherit", width: 260 }}
     />
   );
 }
 
+// Square, tinted status chip — same "solid text on a light tint" recipe
+// used for status text everywhere else in this admin table context.
 function Badge({ text, color }: { text: string; color: string }) {
-  return <span style={{ fontSize: 11, fontWeight: 700, color, background: `${color}18`, padding: "3px 8px", borderRadius: 7 }}>{text}</span>;
+  return <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, letterSpacing: 0.4, color, background: `${color}18`, border: `1px solid ${color}40`, padding: "3px 8px" }}>{text}</span>;
 }
 
 function fmtDate(s: string) {
@@ -259,13 +274,13 @@ function FunnelChart({ funnel }: { funnel: AdminProductMetrics["funnel"] }) {
         return (
           <div key={s.label}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
-              <span style={{ color: TEXT }}>{s.label}</span>
-              <span style={{ color: MUTED, fontFamily: "ui-monospace,monospace", fontSize: 12 }}>
+              <span style={{ color: GR_INK }}>{s.label}</span>
+              <span style={{ color: GR_MUTED, fontFamily: GR_MONO_FONT, fontSize: 12 }}>
                 {s.value}{i > 0 && steps[i - 1].value > 0 ? ` (${Math.round((100 * s.value) / steps[i - 1].value)}%)` : ""}
               </span>
             </div>
-            <div style={{ height: 4, borderRadius: 2, background: "rgba(26,16,53,0.06)" }}>
-              <div style={{ height: 4, borderRadius: 2, width: `${(s.value / max) * 100}%`, background: i === steps.length - 1 ? SUN : INDIGO }} />
+            <div style={{ height: 4, background: GR_BORDER }}>
+              <div style={{ height: 4, width: `${(s.value / max) * 100}%`, background: i === steps.length - 1 ? GR_ORANGE : GR_PRIMARY }} />
             </div>
           </div>
         );
@@ -291,78 +306,78 @@ function DashboardTab({ token, stats }: { token: string; stats: { entities: { by
   return (
     <div>
       {/* HEALTH */}
-      <div style={{ ...glass, padding: "16px 20px", marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center" }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED }}>Health</div>
+      <div style={{ ...card, padding: "16px 20px", marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center" }}>
+        <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED }}>Health</div>
         <HealthRow label="api.tetapi.dev" ok={health?.api.ok} checkedAt={health?.checked_at} />
         <HealthRow label="mcp.tetapi.dev" ok={health?.mcp.ok} checkedAt={health?.checked_at} />
         <HealthRow label="stats.tetapi.dev (GoatCounter)" ok={health?.stats.ok} checkedAt={health?.checked_at} />
       </div>
 
-      {error && <div style={{ color: SUN, fontSize: 13, marginBottom: 16 }}>{error}</div>}
+      {error && <div style={{ color: GR_ORANGE, fontSize: 13, marginBottom: 16 }}>{error}</div>}
 
       {/* GROWTH + FUNNEL */}
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Growth (last 30d)</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Growth (last 30d)</div>
           {product ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <div style={{ fontSize: 12, color: TEXT_SEC, marginBottom: 4 }}>entities/day</div>
+                <div style={{ fontSize: 12, color: GR_BODY, marginBottom: 4 }}>entities/day</div>
                 <DailyChart daily={product.entity_growth} />
               </div>
               <div>
-                <div style={{ fontSize: 12, color: TEXT_SEC, marginBottom: 4 }}>verification_events/day</div>
+                <div style={{ fontSize: 12, color: GR_BODY, marginBottom: 4 }}>verification_events/day</div>
                 <DailyChart daily={product.verification_events_daily} />
               </div>
             </div>
-          ) : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+          ) : <div style={{ fontSize: 13, color: GR_MUTED }}>Loading…</div>}
         </div>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Claim → verified funnel</div>
-          {product ? <FunnelChart funnel={product.funnel} /> : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Claim → verified funnel</div>
+          {product ? <FunnelChart funnel={product.funnel} /> : <div style={{ fontSize: 13, color: GR_MUTED }}>Loading…</div>}
         </div>
       </div>
 
       {/* ENTITY MIX + VERIFICATION LEVEL */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Entity mix (by type)</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Entity mix (by type)</div>
           {product
-            ? <BreakdownList items={Object.entries(product.entities_by_type).map(([label, total]) => ({ label, total }))} color={INDIGO} />
-            : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+            ? <BreakdownList items={Object.entries(product.entities_by_type).map(([label, total]) => ({ label, total }))} color={GR_PRIMARY} />
+            : <div style={{ fontSize: 13, color: GR_MUTED }}>Loading…</div>}
         </div>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Verification level</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Verification level</div>
           {stats
-            ? <BreakdownList items={Object.entries(stats.entities.by_level).map(([label, total]) => ({ label, total }))} color={INDIGO} />
-            : <div style={{ fontSize: 13, color: MUTED }}>Loading…</div>}
+            ? <BreakdownList items={Object.entries(stats.entities.by_level).map(([label, total]) => ({ label, total }))} color={GR_PRIMARY} />
+            : <div style={{ fontSize: 13, color: GR_MUTED }}>Loading…</div>}
         </div>
       </div>
 
       {/* MCP USAGE + TRAFFIC */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>MCP usage</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>MCP usage</div>
           <NotAvailable note="Not available — roadmap 2.4 (MCP usage analytics). No request logging exists yet in mcp/src/*." />
         </div>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Traffic (GoatCounter, 14d)</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Traffic (GoatCounter, 14d)</div>
           {traffic?.available
             ? (
               <>
                 <DailyChart daily={traffic.daily ?? []} />
                 <div style={{ marginTop: 12 }}>
-                  <BreakdownList items={(traffic.top_referrers ?? []).slice(0, 5).map((r) => ({ label: r.ref, total: r.total }))} color={SUN} compact />
+                  <BreakdownList items={(traffic.top_referrers ?? []).slice(0, 5).map((r) => ({ label: r.ref, total: r.total }))} color={GR_ORANGE} compact />
                 </div>
               </>
             )
-            : <div style={{ fontSize: 13, color: MUTED }}>{traffic ? "GoatCounter database not reachable." : "Loading…"}</div>}
+            : <div style={{ fontSize: 13, color: GR_MUTED }}>{traffic ? "GoatCounter database not reachable." : "Loading…"}</div>}
         </div>
       </div>
 
       {/* REGISTRY SEARCH HEALTH */}
-      <div style={{ ...glass, padding: "18px 20px" }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Registry search health</div>
+      <div style={{ ...card, padding: "18px 20px" }}>
+        <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Registry search health</div>
         <NotAvailable note={product?.registry_search_health.note ?? "Not available — roadmap 1.2."} />
       </div>
     </div>
@@ -370,12 +385,12 @@ function DashboardTab({ token, stats }: { token: string; stats: { entities: { by
 }
 
 function HealthRow({ label, ok, checkedAt }: { label: string; ok?: boolean; checkedAt?: string }) {
-  const color = ok === undefined ? MUTED : ok ? "#3E9B5C" : "#B04545";
+  const color = ok === undefined ? GR_MUTED : ok ? "#3E9B5C" : "#B04545";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
       <span style={{ width: 8, height: 8, borderRadius: 4, background: color, flexShrink: 0 }} />
-      <span style={{ color: TEXT }}>{label}</span>
-      <span style={{ color: MUTED, fontSize: 12 }}>
+      <span style={{ color: GR_INK }}>{label}</span>
+      <span style={{ color: GR_MUTED, fontSize: 12 }}>
         {ok === undefined ? "checking…" : ok ? "ok" : "down"}{checkedAt ? ` (checked ${timeAgo(checkedAt)})` : ""}
       </span>
     </div>
@@ -384,8 +399,8 @@ function HealthRow({ label, ok, checkedAt }: { label: string; ok?: boolean; chec
 
 function NotAvailable({ note }: { note: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: TEXT_SEC }}>
-      <span style={{ width: 8, height: 8, borderRadius: 4, background: MUTED, flexShrink: 0, marginTop: 4 }} />
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: GR_BODY }}>
+      <span style={{ width: 8, height: 8, borderRadius: 4, background: GR_MUTED, flexShrink: 0, marginTop: 4 }} />
       <span>{note}</span>
     </div>
   );
@@ -407,12 +422,12 @@ function AnalyticsTab({ token }: { token: string }) {
     adminApi.productMetrics(token, Math.max(days, 30)).then(setProduct).catch(() => {});
   }, [token, days]);
 
-  if (error) return <div style={{ ...glass, padding: 24, color: TEXT_SEC, fontSize: 13.5 }}>{error}</div>;
+  if (error) return <div style={{ ...card, padding: 24, color: GR_BODY, fontSize: 13.5 }}>{error}</div>;
   if (!data) return null;
 
   if (!data.available) {
     return (
-      <div style={{ ...glass, padding: 24, color: TEXT_SEC, fontSize: 13.5 }}>
+      <div style={{ ...card, padding: 24, color: GR_BODY, fontSize: 13.5 }}>
         GoatCounter database not reachable from the API. See <code>docs/analytics.md</code>.
       </div>
     );
@@ -428,19 +443,19 @@ function AnalyticsTab({ token }: { token: string }) {
         <StatCard label="All time" value={t?.all_time ?? 0} sub="since 2026-07-03" />
       </div>
 
-      <div style={{ ...glass, padding: "18px 20px", marginBottom: 16 }}>
+      <div style={{ ...card, padding: "18px 20px", marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED }}>Daily pageviews</div>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED }}>Daily pageviews</div>
           <div style={{ display: "flex", gap: 6 }}>
             {[14, 30, 90].map((d) => (
               <button
                 key={d}
                 onClick={() => setDays(d)}
                 style={{
-                  fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
-                  color: days === d ? "#fff" : TEXT_SEC,
-                  background: days === d ? INDIGO : "rgba(255,255,255,0.55)",
-                  border: days === d ? "none" : "1px solid rgba(26,16,53,0.12)",
+                  fontSize: 12, fontWeight: 600, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit",
+                  color: days === d ? "#fff" : GR_BODY,
+                  background: days === d ? GR_PRIMARY : "#fff",
+                  border: days === d ? "none" : `1px solid ${GR_BORDER}`,
                 }}
               >
                 {d}d
@@ -452,32 +467,32 @@ function AnalyticsTab({ token }: { token: string }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Top pages</div>
-          <BreakdownList items={(data.top_paths ?? []).map((p) => ({ label: p.path, total: p.total }))} color={INDIGO} />
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Top pages</div>
+          <BreakdownList items={(data.top_paths ?? []).map((p) => ({ label: p.path, total: p.total }))} color={GR_PRIMARY} />
         </div>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Referrers</div>
-          <BreakdownList items={(data.top_referrers ?? []).map((r) => ({ label: r.ref, total: r.total }))} color={SUN} />
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Referrers</div>
+          <BreakdownList items={(data.top_referrers ?? []).map((r) => ({ label: r.ref, total: r.total }))} color={GR_ORANGE} />
         </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16 }}>
-        <div style={{ ...glass, padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Browsers</div>
-          <BreakdownList items={(data.browsers ?? []).map((b) => ({ label: b.name, total: b.total }))} color={INDIGO} compact />
+        <div style={{ ...card, padding: "16px 18px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>Browsers</div>
+          <BreakdownList items={(data.browsers ?? []).map((b) => ({ label: b.name, total: b.total }))} color={GR_PRIMARY} compact />
         </div>
-        <div style={{ ...glass, padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Systems</div>
-          <BreakdownList items={(data.systems ?? []).map((s) => ({ label: s.name, total: s.total }))} color={INDIGO} compact />
+        <div style={{ ...card, padding: "16px 18px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>Systems</div>
+          <BreakdownList items={(data.systems ?? []).map((s) => ({ label: s.name, total: s.total }))} color={GR_PRIMARY} compact />
         </div>
-        <div style={{ ...glass, padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Countries</div>
-          <BreakdownList items={(data.locations ?? []).map((l) => ({ label: l.location, total: l.total }))} color={INDIGO} compact />
+        <div style={{ ...card, padding: "16px 18px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>Countries</div>
+          <BreakdownList items={(data.locations ?? []).map((l) => ({ label: l.location, total: l.total }))} color={GR_PRIMARY} compact />
         </div>
-        <div style={{ ...glass, padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Device</div>
-          <BreakdownList items={(data.sizes ?? []).map((s) => ({ label: s.bucket, total: s.total }))} color={INDIGO} compact />
+        <div style={{ ...card, padding: "16px 18px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>Device</div>
+          <BreakdownList items={(data.sizes ?? []).map((s) => ({ label: s.bucket, total: s.total }))} color={GR_PRIMARY} compact />
         </div>
       </div>
 
@@ -492,29 +507,29 @@ function ProductMetricsSection({ data }: { data: AdminProductMetrics }) {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Entity growth</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Entity growth</div>
           <DailyChart daily={data.entity_growth} />
         </div>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Verification events</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Verification events</div>
           <DailyChart daily={data.verification_events_daily} />
         </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Entities by type</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Entities by type</div>
           <BreakdownList
             items={Object.entries(data.entities_by_type).map(([label, total]) => ({ label, total }))}
-            color={INDIGO}
+            color={GR_PRIMARY}
           />
         </div>
-        <div style={{ ...glass, padding: "18px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>Claim → verified funnel</div>
+        <div style={{ ...card, padding: "18px 20px" }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 12 }}>Claim → verified funnel</div>
           <FunnelChart funnel={data.funnel} />
           {!data.registry_search_health.available && (
-            <div style={{ fontSize: 11.5, color: MUTED, marginTop: 14 }}>
+            <div style={{ fontSize: 11.5, color: GR_MUTED, marginTop: 14 }}>
               Registry search health: {data.registry_search_health.note}
             </div>
           )}
@@ -525,7 +540,7 @@ function ProductMetricsSection({ data }: { data: AdminProductMetrics }) {
 }
 
 function DailyChart({ daily }: { daily: { day: string; total: number }[] }) {
-  if (daily.length === 0) return <div style={{ fontSize: 13, color: MUTED, padding: "20px 0" }}>No data yet.</div>;
+  if (daily.length === 0) return <div style={{ fontSize: 13, color: GR_MUTED, padding: "20px 0" }}>No data yet.</div>;
   const max = Math.max(...daily.map((d) => d.total), 1);
   const barW = Math.max(6, Math.min(28, 640 / daily.length - 4));
   return (
@@ -536,11 +551,10 @@ function DailyChart({ daily }: { daily: { day: string; total: number }[] }) {
             style={{
               width: barW,
               height: Math.max(3, (d.total / max) * 110),
-              background: `linear-gradient(180deg,#6E58D6,${INDIGO})`,
-              borderRadius: 4,
+              background: GR_PRIMARY,
             }}
           />
-          <div style={{ fontSize: 9.5, color: MUTED, writingMode: daily.length > 20 ? "vertical-rl" : undefined }}>
+          <div style={{ fontSize: 9.5, color: GR_MUTED, writingMode: daily.length > 20 ? "vertical-rl" : undefined }}>
             {new Date(d.day).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })}
           </div>
         </div>
@@ -550,18 +564,18 @@ function DailyChart({ daily }: { daily: { day: string; total: number }[] }) {
 }
 
 function BreakdownList({ items, color, compact }: { items: { label: string; total: number }[]; color: string; compact?: boolean }) {
-  if (items.length === 0) return <div style={{ fontSize: 13, color: MUTED }}>No data yet.</div>;
+  if (items.length === 0) return <div style={{ fontSize: 13, color: GR_MUTED }}>No data yet.</div>;
   const max = Math.max(...items.map((i) => i.total), 1);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: compact ? 8 : 10 }}>
       {items.map((item) => (
         <div key={item.label}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: compact ? 12 : 13, marginBottom: 3 }}>
-            <span style={{ color: TEXT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: compact ? 100 : 320 }}>{item.label}</span>
-            <span style={{ color: MUTED, fontFamily: "ui-monospace,monospace", fontSize: compact ? 11.5 : 12 }}>{item.total}</span>
+            <span style={{ color: GR_INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: compact ? 100 : 320 }}>{item.label}</span>
+            <span style={{ color: GR_MUTED, fontFamily: GR_MONO_FONT, fontSize: compact ? 11.5 : 12 }}>{item.total}</span>
           </div>
-          <div style={{ height: 4, borderRadius: 2, background: "rgba(26,16,53,0.06)" }}>
-            <div style={{ height: 4, borderRadius: 2, width: `${(item.total / max) * 100}%`, background: color }} />
+          <div style={{ height: 4, background: GR_BORDER }}>
+            <div style={{ height: 4, width: `${(item.total / max) * 100}%`, background: color }} />
           </div>
         </div>
       ))}
@@ -583,7 +597,7 @@ function UsersTab({ token }: { token: string }) {
   useEffect(load, [load]);
 
   return (
-    <div style={{ ...glass, overflow: "hidden" }}>
+    <div style={{ ...card, overflow: "hidden" }}>
       <div style={{ padding: "14px 14px 0" }}>
         <SearchBox onSearch={(v) => { setQ(v); setOffset(0); }} />
       </div>
@@ -594,16 +608,16 @@ function UsersTab({ token }: { token: string }) {
         <tbody>
           {data?.results.map((u) => (
             <tr key={u.id} onClick={() => adminApi.userDetail(token, u.id).then(setDetail).catch(() => {})} style={{ cursor: "pointer" }}>
-              <td style={td}>{u.email}{u.is_agent && <span style={{ marginLeft: 6 }}><Badge text="AGENT" color={INDIGO} /></span>}{!u.is_active && <span style={{ marginLeft: 6 }}><Badge text="INACTIVE" color="#B04545" /></span>}</td>
-              <td style={td}>{u.full_name ?? <span style={{ color: MUTED }}>—</span>}</td>
-              <td style={td}>{u.role === "admin" ? <Badge text="ADMIN" color={SUN} /> : u.role}</td>
+              <td style={td}>{u.email}{u.is_agent && <span style={{ marginLeft: 6 }}><Badge text="AGENT" color={GR_PRIMARY} /></span>}{!u.is_active && <span style={{ marginLeft: 6 }}><Badge text="INACTIVE" color="#B04545" /></span>}</td>
+              <td style={td}>{u.full_name ?? <span style={{ color: GR_MUTED }}>—</span>}</td>
+              <td style={td}>{u.role === "admin" ? <Badge text="ADMIN" color={GR_ORANGE} /> : u.role}</td>
               <td style={td}>{u.auth_provider}</td>
               <td style={td}>{u.entities_count}</td>
               <td style={td}>{fmtDate(u.created_at)}</td>
             </tr>
           ))}
           {data && data.results.length === 0 && (
-            <tr><td style={{ ...td, color: MUTED }} colSpan={6}>No users found.</td></tr>
+            <tr><td style={{ ...td, color: GR_MUTED }} colSpan={6}>No users found.</td></tr>
           )}
         </tbody>
       </table>
@@ -625,17 +639,17 @@ function UserDetailPanel({ token, detail, onClose, onChanged }: { token: string;
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(26,16,53,0.35)", backdropFilter: "blur(4px)", display: "flex", justifyContent: "flex-end" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(560px,100%)", height: "100%", overflowY: "auto", background: "#F6F5FC", padding: "28px 28px 60px", boxShadow: "-16px 0 50px rgba(26,16,53,0.25)" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(560px,100%)", height: "100%", overflowY: "auto", background: GR_TINT, borderLeft: `1px solid ${GR_BORDER}`, padding: "28px 28px 60px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>{u.email}</div>
-          <button onClick={onClose} style={{ fontSize: 20, background: "none", border: "none", cursor: "pointer", color: TEXT }}>×</button>
+          <button onClick={onClose} style={{ fontSize: 20, background: "none", border: "none", cursor: "pointer", color: GR_INK }}>×</button>
         </div>
 
         {/* Suspicion flags */}
         {flags && flags.length > 0 && (
-          <div style={{ background: "rgba(245,154,46,0.12)", border: "1px solid rgba(245,154,46,0.4)", borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#B06A10", marginBottom: 4 }}>⚠ Flags</div>
-            {flags.map((f) => <div key={f} style={{ fontSize: 12.5, color: "#7A4A0C", fontFamily: "ui-monospace,monospace" }}>{f}</div>)}
+          <div style={{ background: "rgba(245,154,46,0.12)", border: "1px solid rgba(245,154,46,0.4)", padding: "10px 14px", marginBottom: 14 }}>
+            <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#B06A10", marginBottom: 4 }}>⚠ Flags</div>
+            {flags.map((f) => <div key={f} style={{ fontSize: 12.5, color: "#7A4A0C", fontFamily: GR_MONO_FONT }}>{f}</div>)}
           </div>
         )}
 
@@ -655,7 +669,7 @@ function UserDetailPanel({ token, detail, onClose, onChanged }: { token: string;
                 URL.revokeObjectURL(a.href);
               } finally { setBusy(""); }
             }}
-            style={{ fontSize: 12.5, fontWeight: 600, padding: "8px 14px", borderRadius: 10, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer", fontFamily: "inherit" }}
+            style={{ ...secondaryBtn, background: "#fff" }}
           >
             {busy === "export" ? "Exporting…" : "⬇ GDPR export"}
           </button>
@@ -669,46 +683,46 @@ function UserDetailPanel({ token, detail, onClose, onChanged }: { token: string;
                 catch { alert("Anonymize failed"); }
                 finally { setBusy(""); }
               }}
-              style={{ fontSize: 12.5, fontWeight: 600, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(176,69,69,0.35)", background: "rgba(176,69,69,0.07)", color: "#B04545", cursor: "pointer", fontFamily: "inherit" }}
+              style={{ fontSize: 12.5, fontWeight: 600, padding: "8px 14px", border: "1px solid rgba(176,69,69,0.35)", background: "rgba(176,69,69,0.07)", color: "#B04545", cursor: "pointer", fontFamily: "inherit" }}
             >
               {busy === "anon" ? "Anonymizing…" : "✕ Anonymize (GDPR)"}
             </button>
           )}
         </div>
 
-        <div style={{ ...glass, padding: 18, marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Profile</div>
+        <div style={{ ...card, padding: 18, marginBottom: 16 }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>Profile</div>
           {[
             ["ID", u.id], ["Name", u.full_name ?? "—"], ["Role", u.role], ["Provider", u.auth_provider],
             ["Active", String(u.is_active)], ["Agent", String(u.is_agent)],
             ["Created", fmtDate(u.created_at)], ["Updated", fmtDate(u.updated_at)],
           ].map(([k, v]) => (
             <div key={k} style={{ display: "flex", gap: 12, fontSize: 13, padding: "4px 0" }}>
-              <span style={{ color: MUTED, width: 90, flexShrink: 0 }}>{k}</span>
-              <span style={{ color: TEXT, fontFamily: k === "ID" ? "ui-monospace,monospace" : "inherit", fontSize: k === "ID" ? 12 : 13, wordBreak: "break-all" }}>{v}</span>
+              <span style={{ color: GR_MUTED, width: 90, flexShrink: 0 }}>{k}</span>
+              <span style={{ color: GR_INK, fontFamily: k === "ID" ? GR_MONO_FONT : "inherit", fontSize: k === "ID" ? 12 : 13, wordBreak: "break-all" }}>{v}</span>
             </div>
           ))}
         </div>
 
-        <div style={{ ...glass, padding: 18, marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Entities ({detail.entities.length})</div>
-          {detail.entities.length === 0 && <div style={{ fontSize: 13, color: MUTED }}>None</div>}
+        <div style={{ ...card, padding: 18, marginBottom: 16 }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>Entities ({detail.entities.length})</div>
+          {detail.entities.length === 0 && <div style={{ fontSize: 13, color: GR_MUTED }}>None</div>}
           {detail.entities.map((e) => (
-            <div key={e.id} style={{ padding: "10px 0", borderBottom: "1px solid rgba(26,16,53,0.06)" }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{e.name} <span style={{ fontSize: 12, color: MUTED }}>({e.entity_type})</span></div>
-              <div style={{ fontSize: 12, color: TEXT_SEC, marginTop: 3 }}>
+            <div key={e.id} style={{ padding: "10px 0", borderBottom: "1px solid #F1EDF9" }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{e.name} <span style={{ fontSize: 12, color: GR_MUTED }}>({e.entity_type})</span></div>
+              <div style={{ fontSize: 12, color: GR_BODY, marginTop: 3 }}>
                 level: {e.verification_level} · registry: {e.registry_status} {e.registry_id ? `· ${e.registry_id}` : ""} {e.country ? `· ${e.country}` : ""}
               </div>
             </div>
           ))}
         </div>
 
-        <div style={{ ...glass, padding: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>Verification events ({detail.verification_events.length})</div>
-          {detail.verification_events.length === 0 && <div style={{ fontSize: 13, color: MUTED }}>None</div>}
+        <div style={{ ...card, padding: 18 }}>
+          <div style={{ fontFamily: GR_MONO_FONT, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>Verification events ({detail.verification_events.length})</div>
+          {detail.verification_events.length === 0 && <div style={{ fontSize: 13, color: GR_MUTED }}>None</div>}
           {detail.verification_events.map((ev) => (
-            <div key={ev.id} style={{ fontSize: 12.5, color: TEXT_SEC, padding: "6px 0", borderBottom: "1px solid rgba(26,16,53,0.05)" }}>
-              <strong style={{ color: TEXT }}>{ev.event_type}</strong> · L{ev.level} · {ev.source} · {ev.ots_status}{ev.btc_block ? ` · block #${ev.btc_block}` : ""} · {fmtDate(ev.created_at)}
+            <div key={ev.id} style={{ fontSize: 12.5, color: GR_BODY, padding: "6px 0", borderBottom: "1px solid #F1EDF9" }}>
+              <strong style={{ color: GR_INK }}>{ev.event_type}</strong> · L{ev.level} · {ev.source} · {ev.ots_status}{ev.btc_block ? ` · block #${ev.btc_block}` : ""} · {fmtDate(ev.created_at)}
             </div>
           ))}
         </div>
@@ -720,7 +734,7 @@ function UserDetailPanel({ token, detail, onClose, onChanged }: { token: string;
 /* ── Claims tab ────────────────────────────────────────────────────────────── */
 
 const CLAIM_OPS_STATUSES = ["contacted", "converted", "rejected"] as const;
-const OPS_STATUS_COLOR: Record<string, string> = { contacted: INDIGO, converted: "#3E9B5C", rejected: "#B04545" };
+const OPS_STATUS_COLOR: Record<string, string> = { contacted: GR_PRIMARY, converted: "#3E9B5C", rejected: "#B04545" };
 
 function ClaimsTab({ token }: { token: string }) {
   const [data, setData] = useState<{ total: number; results: AdminClaim[] } | null>(null);
@@ -735,7 +749,7 @@ function ClaimsTab({ token }: { token: string }) {
   useEffect(load, [load]);
 
   return (
-    <div style={{ ...glass, overflow: "hidden" }}>
+    <div style={{ ...card, overflow: "hidden" }}>
       <div style={{ padding: "14px 14px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ display: "flex", gap: 6 }}>
           {[undefined, ...CLAIM_OPS_STATUSES].map((s) => (
@@ -743,10 +757,10 @@ function ClaimsTab({ token }: { token: string }) {
               key={s ?? "all"}
               onClick={() => { setOpsStatus(s); setOffset(0); }}
               style={{
-                fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
-                color: opsStatus === s ? "#fff" : TEXT_SEC,
-                background: opsStatus === s ? INDIGO : "rgba(255,255,255,0.55)",
-                border: opsStatus === s ? "none" : "1px solid rgba(26,16,53,0.12)",
+                fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit",
+                color: opsStatus === s ? "#fff" : GR_BODY,
+                background: opsStatus === s ? GR_PRIMARY : "#fff",
+                border: opsStatus === s ? "none" : `1px solid ${GR_BORDER}`,
               }}
             >
               {s ? s[0].toUpperCase() + s.slice(1) : "All"}
@@ -767,7 +781,7 @@ function ClaimsTab({ token }: { token: string }) {
             } catch { alert("Export failed"); }
             finally { setExporting(false); }
           }}
-          style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer", fontFamily: "inherit" }}
+          style={{ ...secondaryBtn, background: "#fff", opacity: exporting ? 0.6 : 1 }}
         >
           {exporting ? "Exporting…" : "⬇ Export CSV"}
         </button>
@@ -779,14 +793,14 @@ function ClaimsTab({ token }: { token: string }) {
         <tbody>
           {data?.results.map((c) => (
             <tr key={c.id}>
-              <td style={{ ...td, fontFamily: "ui-monospace,monospace" }}>{c.position}</td>
+              <td style={{ ...td, fontFamily: GR_MONO_FONT }}>{c.position}</td>
               <td style={td}>{c.email}</td>
               <td style={td}>{c.entity_type}</td>
               <td style={td}>
-                {c.ops_status ? <Badge text={c.ops_status.toUpperCase()} color={OPS_STATUS_COLOR[c.ops_status] ?? MUTED} /> : <span style={{ color: MUTED }}>new</span>}
-                {c.ready_to_pay && <span style={{ marginLeft: 6 }}><Badge text="FOUNDING LOCKED" color={SUN} /></span>}
+                {c.ops_status ? <Badge text={c.ops_status.toUpperCase()} color={OPS_STATUS_COLOR[c.ops_status] ?? GR_MUTED} /> : <span style={{ color: GR_MUTED }}>new</span>}
+                {c.ready_to_pay && <span style={{ marginLeft: 6 }}><Badge text="FOUNDING LOCKED" color={GR_ORANGE} /></span>}
               </td>
-              <td style={{ ...td, fontSize: 12, color: TEXT_SEC }}>{c.source?.utm_source ?? c.source?.referrer ?? "—"}</td>
+              <td style={{ ...td, fontSize: 12, color: GR_BODY }}>{c.source?.utm_source ?? c.source?.referrer ?? "—"}</td>
               <td style={td}>{fmtDate(c.created_at)}</td>
               <td style={td}>
                 <select
@@ -800,7 +814,7 @@ function ClaimsTab({ token }: { token: string }) {
                     catch { alert("Status update failed"); }
                     finally { setUpdating(null); }
                   }}
-                  style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid rgba(26,16,53,0.14)", background: "rgba(255,255,255,0.7)", color: TEXT_SEC, fontFamily: "inherit" }}
+                  style={{ fontSize: 12, padding: "5px 8px", border: `1px solid ${GR_BORDER}`, background: "#fff", color: GR_BODY, fontFamily: "inherit" }}
                 >
                   <option value="">Mark as…</option>
                   {CLAIM_OPS_STATUSES.filter((s) => s !== c.ops_status).map((s) => (
@@ -811,7 +825,7 @@ function ClaimsTab({ token }: { token: string }) {
             </tr>
           ))}
           {data && data.results.length === 0 && (
-            <tr><td style={{ ...td, color: MUTED }} colSpan={7}>No claims yet.</td></tr>
+            <tr><td style={{ ...td, color: GR_MUTED }} colSpan={7}>No claims yet.</td></tr>
           )}
         </tbody>
       </table>
@@ -834,7 +848,7 @@ function EntitiesTab({ token }: { token: string }) {
   useEffect(load, [load]);
 
   return (
-    <div style={{ ...glass, overflow: "hidden" }}>
+    <div style={{ ...card, overflow: "hidden" }}>
       <div style={{ padding: "14px 14px 0" }}>
         <SearchBox onSearch={(v) => { setQ(v); setOffset(0); }} />
       </div>
@@ -845,12 +859,12 @@ function EntitiesTab({ token }: { token: string }) {
         <tbody>
           {data?.results.map((e) => (
             <tr key={e.id}>
-              <td style={td}>{e.name}<div style={{ fontSize: 11.5, color: MUTED }}>{e.slug}</div></td>
+              <td style={td}>{e.name}<div style={{ fontSize: 11.5, color: GR_MUTED }}>{e.slug}</div></td>
               <td style={td}>{e.entity_type}</td>
-              <td style={td}><Badge text={e.verification_level.toUpperCase()} color={e.verification_level === "none" ? "#9088B0" : INDIGO} /></td>
-              <td style={{ ...td, fontSize: 12.5 }}>{e.registry_status}{e.registry_id ? <div style={{ color: MUTED, fontSize: 11.5 }}>{e.registry_id}</div> : null}</td>
+              <td style={td}><Badge text={e.verification_level.toUpperCase()} color={e.verification_level === "none" ? "#9088B0" : GR_PRIMARY} /></td>
+              <td style={{ ...td, fontSize: 12.5 }}>{e.registry_status}{e.registry_id ? <div style={{ color: GR_MUTED, fontSize: 11.5 }}>{e.registry_id}</div> : null}</td>
               <td style={{ ...td, fontSize: 12.5 }}>{e.owner_email ?? "—"}</td>
-              <td style={{ ...td, fontFamily: "ui-monospace,monospace", fontSize: 12 }}>{(e.t_score ?? 0).toFixed(2)} / {(e.p_score ?? 0).toFixed(2)}</td>
+              <td style={{ ...td, fontFamily: GR_MONO_FONT, fontSize: 12 }}>{(e.t_score ?? 0).toFixed(2)} / {(e.p_score ?? 0).toFixed(2)}</td>
               <td style={td}>{fmtDate(e.created_at)}</td>
               <td style={td}>
                 <button
@@ -864,7 +878,7 @@ function EntitiesTab({ token }: { token: string }) {
                     } catch { alert("Validation failed"); }
                     finally { setValidating(null); }
                   }}
-                  style={{ fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 9, border: `1px solid ${INDIGO}40`, background: "rgba(91,69,201,0.08)", color: INDIGO, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                  style={{ ...secondaryBtn, fontSize: 12, padding: "6px 12px", background: "#fff", whiteSpace: "nowrap", opacity: validating === e.id ? 0.6 : 1 }}
                 >
                   {validating === e.id ? "…" : "Validate"}
                 </button>
@@ -872,7 +886,7 @@ function EntitiesTab({ token }: { token: string }) {
             </tr>
           ))}
           {data && data.results.length === 0 && (
-            <tr><td style={{ ...td, color: MUTED }} colSpan={8}>No entities found.</td></tr>
+            <tr><td style={{ ...td, color: GR_MUTED }} colSpan={8}>No entities found.</td></tr>
           )}
         </tbody>
       </table>
@@ -892,7 +906,7 @@ function AuditTab({ token }: { token: string }) {
   }, [token, offset]);
 
   return (
-    <div style={{ ...glass, overflow: "hidden" }}>
+    <div style={{ ...card, overflow: "hidden" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr>
           <th style={th}>When</th><th style={th}>Actor</th><th style={th}>Action</th><th style={th}>Target</th>
@@ -902,12 +916,12 @@ function AuditTab({ token }: { token: string }) {
             <tr key={r.id}>
               <td style={td}>{fmtDate(r.created_at)}</td>
               <td style={td}>{r.actor_email}</td>
-              <td style={{ ...td, fontFamily: "ui-monospace,monospace", fontSize: 12.5 }}>{r.action}</td>
-              <td style={{ ...td, fontSize: 12.5, color: TEXT_SEC }}>{r.target_type ? `${r.target_type} ${r.target_id ?? ""}` : "—"}</td>
+              <td style={{ ...td, fontFamily: GR_MONO_FONT, fontSize: 12.5 }}>{r.action}</td>
+              <td style={{ ...td, fontSize: 12.5, color: GR_BODY }}>{r.target_type ? `${r.target_type} ${r.target_id ?? ""}` : "—"}</td>
             </tr>
           ))}
           {data && data.results.length === 0 && (
-            <tr><td style={{ ...td, color: MUTED }} colSpan={4}>Empty.</td></tr>
+            <tr><td style={{ ...td, color: GR_MUTED }} colSpan={4}>Empty.</td></tr>
           )}
         </tbody>
       </table>
