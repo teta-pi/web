@@ -203,15 +203,15 @@ function AttestationCellView({ cell, mobile: m }: { cell: AttestationCell; mobil
 
 function AttestationBar({ mobile: m, updatedAt }: { mobile: boolean; updatedAt: string | null }) {
   const store = useProfileStore();
-  const isPerson = isPersonKind(store.entityKind);
   const total = store.blocks.length;
 
-  // "registry" doesn't apply to person-kind entities (journalist/actor/creator/
-  // other never run a registry check) — shown as an explicit n/a cell rather
-  // than silently reusing another attestation's slot.
-  const registryCell: AttestationCell = isPerson
-    ? { key: "registry", kind: "registry", token: "registry:n/a", detail: "not applicable — individual", state: "n/a", verified: false }
-    : store.registryStatus === "verified" && store.registryData
+  // Registry match is not business-only — a person-kind entity can carry a
+  // real, verified registry_status too (e.g. a sole proprietor's name found
+  // in Handelsregister; confirmed live for a real person-kind entity, see
+  // docs/known-issues.md 3.23). Always reflect the real store value here,
+  // regardless of entity_type — same rule /e/[slug]'s public page already
+  // follows (3.22a fixed the identical bug there first).
+  const registryCell: AttestationCell = store.registryStatus === "verified" && store.registryData
     ? {
         key: "registry", kind: "registry", token: "registry:attested",
         detail: `${store.registryData.iso} · ${store.registryData.authority} ${store.registryData.registryId}`.trim(),
@@ -1351,8 +1351,13 @@ function VerifyActionTile({
 function VerifyMenu({
   businessId, token, mobile: m, entityKind,
 }: { businessId: string | null; token: string | null; mobile: boolean; entityKind: EntityKind }) {
-  // Registry / Document Upload / Legal-entity link are business concepts — a
-  // persona account (journalist/actor/creator/other) only gets Email + Domain.
+  // Document Upload / Legal-entity link are genuinely business concepts
+  // (registration certificate, brand→legal-entity link) — a persona account
+  // (journalist/actor/creator/other) doesn't get those tiles. Registry Match
+  // is NOT gated here: the backend runs the same name-match check for any
+  // entity kind and a real person-kind entity can carry a genuine verified
+  // registry_status (see docs/known-issues.md 3.23) — was incorrectly gated
+  // business-only until this fix.
   const isBusinessKind = !isPersonKind(entityKind);
   const [activeKey, setActiveKey] = useState<VerifyMenuKey | null>(null);
   const toggle = (k: VerifyMenuKey) => setActiveKey((cur) => (cur === k ? null : k));
@@ -1534,7 +1539,7 @@ function VerifyMenu({
   const verifyItems: Array<{
     key: VerifyMenuKey; label: string; done: boolean; accent: string; icon: React.ReactNode;
   } | false> = [
-    isBusinessKind && {
+    {
       key: "registry", label: "Registry", done: registryVerified, accent: GR_PRIMARY,
       icon: <BuildingIcon size={18} color={registryVerified || activeKey === "registry" ? GR_PRIMARY : GR_MUTED} />,
     },
@@ -1591,8 +1596,10 @@ function VerifyMenu({
         ))}
       </div>
 
-      {/* Official Registry Match — business/organization only */}
-      {activeKey === "registry" && isBusinessKind && (
+      {/* Official Registry Match — open to any entity kind (3.23): the
+          backend name-match check isn't business-only, and a sole
+          proprietor / professional register entry can genuinely match. */}
+      {activeKey === "registry" && (
         <MethodCard
           title="Official Registry Match"
           desc="Match your legal name against Handelsregister, GLEIF or EU VAT."
@@ -2437,16 +2444,16 @@ function AgentView({
   mobile: m, slug, verificationLevel,
 }: { mobile: boolean; slug: string | null; verificationLevel: VerificationLevel | null }) {
   const store = useProfileStore();
-  const isPerson = isPersonKind(store.entityKind);
   const total = store.blocks.length;
 
-  const registryValue = isPerson
-    ? "n/a"
-    : store.registryStatus === "verified" && store.registryData
+  // Registry match isn't business-only (see AttestationBar above and
+  // docs/known-issues.md 3.23) — reflect the real store value regardless of
+  // entity_type, same as region 2.
+  const registryValue = store.registryStatus === "verified" && store.registryData
     ? `${store.registryData.iso} · ${store.registryData.authority} ${store.registryData.registryId}`.trim()
     : "unverified";
-  const registryState = isPerson ? "not applicable" : store.registryStatus ?? "unverified";
-  const registryVerified = !isPerson && store.registryStatus === "verified";
+  const registryState = store.registryStatus ?? "unverified";
+  const registryVerified = store.registryStatus === "verified";
 
   const signed = store.blocks.filter((b) => b.media?.c2pa_verified).length;
   const c2paValue = total > 0 ? `${signed} of ${total} blocks signed` : "no blocks yet";
