@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import QRCode from "react-qr-code";
 import {
   SpinnerIcon,
   CheckCircleIcon,
   PasskeyIcon,
+  CameraIcon,
 } from "@/components/ui/VerificationIcon";
 import { useOnboardingStore } from "@/stores/useOnboardingStore";
 import { type EntityKind, entityTypeForKind, isPersonKind } from "@/lib/types";
-import { searchApi, authApi, businessApi, claimApi } from "@/lib/api";
+import { searchApi, authApi, businessApi, claimApi, devices } from "@/lib/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import {
   GR_INK, GR_BODY, GR_MUTED, GR_PRIMARY, GR_PRIMARY_HOVER,
@@ -146,6 +148,9 @@ export default function ClaimPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const claimSubmittedRef = useRef(false);
+  const [camQr, setCamQr] = useState<string | null>(null);
+  const [camLoading, setCamLoading] = useState(false);
+  const [camError, setCamError] = useState("");
 
   const isPerson = isPersonKind(store.entityKind);
 
@@ -206,9 +211,11 @@ export default function ClaimPage() {
     return () => clearTimeout(debounceRef.current);
   }, [store.query, store.step]);
 
-  // Camera step is hidden until 14.x's device-link flow is confirmed working
-  // on a real device (docs/known-issues.md QA #11/#33) — the rail only ever
-  // shows Identify/Verify here; Publish is the Step 4 success screen below.
+  // Rail only ever shows Identify/Verify — Camera (step 3) is an optional,
+  // skippable interstitial between Verify and the Publish/success screen
+  // (14.5: reuses the same devices.generateToken() flow as PiCamButton on
+  // /profile, now that 14.4 confirmed device-link works on a real device),
+  // so it isn't counted in the progress rail either, same as step 4 isn't.
   const STEP_LABELS = ["Identify", "Verify", "Publish"];
 
   /* ── Step 0: Entry — pick a type ── */
@@ -562,7 +569,7 @@ export default function ClaimPage() {
                           const res = await authApi.verifyCode(emailInput.trim(), emailCode);
                           store.setToken(res.access_token);
                           useAuthStore.getState().setAuth(res.access_token, { email: emailInput.trim() } as never);
-                          store.setAuthed(true); store.setStep(4);
+                          store.setAuthed(true); store.setStep(3);
                         } catch (err) {
                           const msg = err instanceof Error ? err.message : "";
                           setEmailError(
@@ -583,6 +590,70 @@ export default function ClaimPage() {
               )}
               <div style={{ marginTop: 20 }}>
                 <span onClick={() => store.setStep(1)} style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}>← Change name</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </PageShell>
+    );
+  }
+
+  /* ── Step 3: Connect camera (optional, skippable) ── */
+  if (store.step === 3) {
+    async function handleConnect() {
+      if (!store.token) return;
+      setCamLoading(true); setCamError("");
+      try {
+        const data = await devices.generateToken(store.token);
+        setCamQr(JSON.stringify({ token: data.token, entity_id: data.entity_id, entity_name: data.entity_name }));
+      } catch (e) {
+        setCamError(e instanceof Error ? e.message : "Could not generate QR. Try again.");
+      } finally { setCamLoading(false); }
+    }
+
+    return (
+      <PageShell m={m}>
+        <div style={{
+          minHeight: "100vh", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          padding: m ? "80px 24px" : "80px 40px", textAlign: "center",
+        }}>
+          <CameraIcon size={40} color={GR_PRIMARY} />
+
+          <div style={{ fontSize: m ? 30 : 40, fontWeight: 600, letterSpacing: "-1px", lineHeight: 1.06, marginTop: 22, marginBottom: 10 }}>
+            Connect your Pi CAM.
+          </div>
+          <div style={{ fontSize: 15.5, fontWeight: 300, lineHeight: 1.6, color: GR_BODY, maxWidth: 400, marginBottom: 30 }}>
+            Scan a QR in the Pi CAM app to link your camera — captures are C2PA-signed and
+            uploaded straight into your page. Optional, and you can always do this later from
+            your profile.
+          </div>
+
+          {!camQr ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+              <BtnPrimary onClick={handleConnect} disabled={camLoading}>
+                {camLoading ? <><SpinnerIcon size={15} /> Generating…</> : <><CameraIcon size={15} color="#fff" /> Connect Camera</>}
+              </BtnPrimary>
+              {camError && <div style={{ fontSize: 13, color: GR_ORANGE, maxWidth: 320 }}>{camError}</div>}
+              <span onClick={() => store.setStep(4)} style={{ fontSize: 13.5, color: GR_MUTED, cursor: "pointer" }}>
+                Skip for now →
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+              <div style={{
+                display: "inline-block", padding: 16, background: "#fff",
+                border: `1.5px solid ${GR_BORDER}`, borderRadius: 0,
+              }}>
+                <QRCode value={camQr} size={200} fgColor={GR_INK} bgColor="#ffffff" level="M" />
+              </div>
+              <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                <BtnPrimary onClick={() => { store.setPaired(true); store.setStep(4); }}>
+                  I&apos;ve linked it →
+                </BtnPrimary>
+                <span onClick={() => store.setStep(4)} style={{ fontSize: 13.5, color: GR_MUTED, cursor: "pointer" }}>
+                  Skip for now
+                </span>
               </div>
             </div>
           )}
