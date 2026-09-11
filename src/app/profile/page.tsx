@@ -13,6 +13,7 @@ import {
   DocumentIcon,
   LinkIcon,
   ShieldIcon,
+  CheckCircleIcon,
 } from "@/components/ui/VerificationIcon";
 import { useProfileStore, type ProfileView, type ProfileBlock } from "@/stores/useProfileStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -2100,11 +2101,27 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [paired, setPaired] = useState(false);
 
   // Check the shared auth store (populated by /login and /settings) first, so
   // users who already have a session there aren't asked to sign in again —
   // falling back to the claim flow's token/localStorage for /claim users.
   const authToken = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+
+  // Real paired status from the server — previously this button always read
+  // "Connect Camera" no matter how many devices were actually registered
+  // (GET /devices didn't exist; the app-side pairing succeeded but the web
+  // never reflected it). Refetched on mount and again when the QR modal
+  // closes, since that's the natural moment a just-completed pairing (done
+  // on the phone, out of band) should show up here.
+  async function refreshPaired() {
+    if (!authToken) return;
+    try {
+      const data = await devices.list(authToken);
+      setPaired(data.paired);
+    } catch { /* non-critical status check — leave last known state */ }
+  }
+  useEffect(() => { refreshPaired(); }, [authToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleConnect() {
     const token = authToken;
@@ -2129,6 +2146,11 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+        {paired && (
+          <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, color: "#22B07D" }}>
+            <CheckCircleIcon size={12} /> Camera linked
+          </span>
+        )}
         <button
           onClick={handleConnect}
           disabled={loading}
@@ -2143,7 +2165,7 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
           }}
         >
           {loading ? <SpinnerIcon size={13} /> : <CameraIcon size={13} color="#5B45C9" />}
-          {loading ? "Generating…" : "Connect Camera"}
+          {loading ? "Generating…" : paired ? "Link another camera" : "Connect Camera"}
         </button>
         {error && <div style={{ fontSize: 11.5, color: "#F59A2E", maxWidth: 220, textAlign: "right" }}>{error}</div>}
       </div>
@@ -2165,7 +2187,7 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
         <PiCamModal
           qrData={qrData}
           entityName={entityName || "Pi CAM Test"}
-          onClose={() => setQrData(null)}
+          onClose={() => { setQrData(null); refreshPaired(); }}
         />
       )}
     </>

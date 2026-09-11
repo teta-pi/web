@@ -512,6 +512,9 @@ export const blockApi = {
 export const devices = {
   generateToken: (token: string): Promise<{ token: string; entity_id: string; entity_name: string; expires_in: number }> =>
     request("/devices/generate-token", { method: "POST" }, token),
+
+  list: (token: string): Promise<{ paired: boolean; devices: Array<{ id: string; label: string; registered_at: string }> }> =>
+    request("/devices", {}, token),
 };
 
 // Verification methods (verification rework — docs/verification-rework.md §2).
