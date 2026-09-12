@@ -1819,50 +1819,37 @@ function BlockEditPanel({
   const token = sharedToken ?? store.authToken ?? (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
 
   const handleFileUpload = useCallback(
-    async (source: "pi_camera" | "file", file?: File) => {
-      if (!block) return;
+    async (file: File) => {
+      if (!block || !token || !store.businessId) return;
       setUploadError(null);
-      store.setBlockMedia(block.id, { source, phase: source === "pi_camera" ? "signing" : "timestamping" });
+      store.setBlockMedia(block.id, { source: "file", phase: "timestamping" });
 
-      // Real upload for file source
-      if (source === "file" && file) {
-        if (token && store.businessId) {
-          try {
-            const { mediaApi } = await import("@/lib/api");
-            const result = await mediaApi.upload(block.id, file, file.type.split("/")[0] || "image", token);
-            // mediaApi.upload's own response doesn't carry storage_url/original_hash
-            // (dropped by the API's response_model) — re-fetch the block via the
-            // permalink endpoint to read back the real MediaOut the server wrote.
-            const updatedBlock = await blockApi.get(block.id, token);
-            const uploaded =
-              updatedBlock.media.find((m) => m.id === result.media_id) ??
-              updatedBlock.media[updatedBlock.media.length - 1];
-            store.setBlockMedia(block.id, {
-              source,
-              phase: "done",
-              id: uploaded?.id,
-              storage_url: uploaded?.storage_url,
-              original_hash: uploaded?.original_hash,
-              c2pa_verified: uploaded?.c2pa_verified,
-              bitcoin_confirmed: uploaded?.bitcoin_confirmed,
-              bitcoin_block: uploaded?.bitcoin_block,
-              type: uploaded?.type,
-              uploaded_at: uploaded?.uploaded_at,
-            });
-          } catch (e) {
-            setUploadError(e instanceof Error ? e.message : "Upload failed");
-            store.setBlockMedia(block.id, null);
-          }
-          return;
-        }
+      try {
+        const { mediaApi } = await import("@/lib/api");
+        const result = await mediaApi.upload(block.id, file, file.type.split("/")[0] || "image", token);
+        // mediaApi.upload's own response doesn't carry storage_url/original_hash
+        // (dropped by the API's response_model) — re-fetch the block via the
+        // permalink endpoint to read back the real MediaOut the server wrote.
+        const updatedBlock = await blockApi.get(block.id, token);
+        const uploaded =
+          updatedBlock.media.find((m) => m.id === result.media_id) ??
+          updatedBlock.media[updatedBlock.media.length - 1];
+        store.setBlockMedia(block.id, {
+          source: "file",
+          phase: "done",
+          id: uploaded?.id,
+          storage_url: uploaded?.storage_url,
+          original_hash: uploaded?.original_hash,
+          c2pa_verified: uploaded?.c2pa_verified,
+          bitcoin_confirmed: uploaded?.bitcoin_confirmed,
+          bitcoin_block: uploaded?.bitcoin_block,
+          type: uploaded?.type,
+          uploaded_at: uploaded?.uploaded_at,
+        });
+      } catch (e) {
+        setUploadError(e instanceof Error ? e.message : "Upload failed");
+        store.setBlockMedia(block.id, null);
       }
-
-      // Pi CAM pairing isn't wired yet (tracked separately, 14.x) — UI-only
-      // simulation, no real fields to attach.
-      setTimeout(
-        () => store.setBlockMedia(block.id, { source, phase: "done" }),
-        source === "pi_camera" ? 850 : 400
-      );
     },
     [block, store, token]
   );
@@ -1912,15 +1899,23 @@ function BlockEditPanel({
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 16px", border: `1px dashed ${GR_LILAC}`, flexWrap: "wrap" }}>
             <CameraIcon size={22} color={GR_MUTED} />
             <button
-              onClick={() => handleFileUpload("pi_camera")}
+              onClick={() => fileRef.current?.click()}
               style={{ padding: "9px 16px", border: `1px solid ${GR_PRIMARY}`, background: GR_TINT, color: GR_PRIMARY, fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
             >
-              Upload from PI Camera
+              Upload a file
             </button>
-            <span onClick={() => fileRef.current?.click()} style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}>
-              or upload a file
-            </span>
-            <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload("file", f); }} />
+            <input ref={fileRef} type="file" accept="video/*,image/*,.pdf" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
+          </div>
+          {/* Pi CAM captures never attach to an arbitrary block picked here —
+              the device always writes into its entity's own "Pi CAM Captures"
+              block (api/app/api/routes/media.py::device_upload_media). A
+              button that pretended to pull a capture into *this* block was
+              pure UI simulation (never wired, never will be — wrong shape for
+              how the real pipeline works) and has been removed; point people
+              at the real flow instead. */}
+          <div style={{ fontSize: 12, color: GR_MUTED, marginTop: 8 }}>
+            Paired a Pi CAM? New captures appear automatically in their own
+            &quot;Pi CAM Captures&quot; block — no need to upload them here.
           </div>
           {uploadError && <div style={{ fontSize: 12, color: GR_ORANGE, marginTop: 6 }}>{uploadError}</div>}
         </div>
