@@ -7,6 +7,13 @@ export type VerificationLevel =
   | "full"
   | "live";
 export type EntityType = "business" | "person" | "organization";
+// 1.11 bulk pre-verification import — "pre_verified_unclaimed" rows are
+// public-data snapshots, not self-reported, until the owner claims them.
+export type ClaimStatus =
+  | "self_registered"
+  | "pre_verified_unclaimed"
+  | "claimed"
+  | "opted_out";
 
 export interface RegistryData {
   registry: string;
@@ -91,6 +98,7 @@ export interface SearchResult {
   ai_categories: Record<string, unknown> | null;
   agent_endpoint: string | null;
   agent_endpoint_verified: boolean;
+  claim_status: ClaimStatus;
 }
 
 export interface User {

@@ -262,6 +262,11 @@ function MobileResultRowView({
             <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: trustColor, border: `1px ${trustDashed ? "dashed" : "solid"} ${trustColor}`, padding: "1px 5px" }}>
               {trustLabel}
             </span>
+            {result.claim_status === "pre_verified_unclaimed" && (
+              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: GR_MUTED, border: `1px dashed ${GR_MUTED}`, padding: "1px 5px" }}>
+                pre-verified · unclaimed
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -325,6 +330,11 @@ function ResultRowView({
             <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: trustColor, border: `1px ${trustDashed ? "dashed" : "solid"} ${trustColor}`, padding: "2px 7px", letterSpacing: "0.6px" }}>
               {trustLabel}
             </span>
+            {result.claim_status === "pre_verified_unclaimed" && (
+              <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED, border: `1px dashed ${GR_MUTED}`, padding: "2px 7px", letterSpacing: "0.6px" }}>
+                pre-verified · unclaimed
+              </span>
+            )}
             <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: GR_MUTED }}>
               {result.block_count} block{result.block_count === 1 ? "" : "s"} · — agent lookups / 30d
             </span>

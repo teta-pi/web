@@ -44,6 +44,12 @@ interface PublicProfile {
   legal_entity: { id: string; name: string; slug: string; registry_status: string } | null;
   agent_endpoint: string | null;
   agent_endpoint_verified: boolean;
+  // 1.11 bulk pre-verification import — a "pre_verified_unclaimed" row is a
+  // public-data snapshot TETA+PI compiled, not a self-report; must be
+  // disclosed on the page itself (GTM honesty guardrail, docs/gtm.md
+  // Phase 2), not left as an API-only distinction.
+  claim_status: "self_registered" | "pre_verified_unclaimed" | "claimed" | "opted_out";
+  pre_verified_unclaimed: boolean;
   blocks: {
     title: string;
     description: string | null;
@@ -161,6 +167,52 @@ function AttestationBar({ profile, mobile: m }: { profile: PublicProfile; mobile
       {[registryCell, c2paCell, btcCell].map((c) => (
         <AttestationCellView key={c.kind} cell={c} mobile={m} />
       ))}
+    </div>
+  );
+}
+
+// ===== Pre-verified-unclaimed disclosure (1.11, GTM honesty guardrail) —
+// deliberately NOT styled like the registry/c2pa/btc seals above: this flag
+// means less certainty (a public-data snapshot, no owner confirmation yet),
+// not more, so it borrows the dashed-border "not attested" convention
+// /search already uses for L0 rows instead of any seal color. Placed right
+// under AttestationBar so a visitor can't miss it before reading the rest
+// of the (real, attested) page content. =====
+function PreVerifiedBanner({ profile, mobile: m }: { profile: PublicProfile; mobile: boolean }) {
+  const [showInfo, setShowInfo] = useState(false);
+  if (!profile.pre_verified_unclaimed) return null;
+
+  return (
+    <div
+      style={{
+        display: "flex", flexDirection: m ? "column" : "row", alignItems: m ? "flex-start" : "center",
+        flexWrap: "wrap", gap: m ? 10 : 16, borderBottom: `1px solid ${GR_BORDER}`, background: GR_RAISED,
+        padding: m ? "13px 16px" : "14px 34px",
+      }}
+    >
+      <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <span style={{ width: 10, height: 10, border: `1.5px dashed ${GR_MUTED}`, flexShrink: 0 }} />
+        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", color: GR_MUTED }}>
+          Pre-verified · Unclaimed
+        </span>
+      </span>
+      <span style={{ fontSize: 13, color: GR_BODY, lineHeight: 1.5, ...(m ? { width: "100%" } : { flex: "1 1 280px" }) }}>
+        Public data snapshot compiled by TETA+PI — not self-reported, and not yet confirmed by an owner.
+      </span>
+      <span
+        onClick={() => setShowInfo((v) => !v)}
+        style={{
+          fontFamily: GR_MONO_FONT, fontSize: 11.5, fontWeight: 600, color: GR_PRIMARY,
+          border: `1px solid ${GR_LILAC}`, padding: "7px 14px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap",
+        }}
+      >
+        Is this you? Claim this profile
+      </span>
+      {showInfo && (
+        <div style={{ width: "100%", fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_MUTED, lineHeight: 1.5 }}>
+          Domain-ownership claim flow — coming soon. Once live, confirming a DNS TXT record on {profile.name}&rsquo;s domain will move this profile to &ldquo;claimed&rdquo;.
+        </div>
+      )}
     </div>
   );
 }
@@ -393,6 +445,7 @@ export default function PublicEntityPage() {
         {profile && (
           <div style={{ background: "#fff", border: `1px solid ${GR_BORDER}` }}>
             <AttestationBar profile={profile} mobile={m} />
+            <PreVerifiedBanner profile={profile} mobile={m} />
             <EntityIdentity profile={profile} mobile={m} />
             <TrustChips profile={profile} mobile={m} />
 
