@@ -890,10 +890,13 @@ export default function ProfilePage() {
     store.setRegistryData(null);
     setEntityMeta({ verificationLevel: null, createdAt: null, updatedAt: null });
     let cancelled = false;
+    // Owner token: without it a private (is_public=false) entity now 404s
+    // (api S-17) and the owner's own blocks/name would silently render empty.
+    const ownerToken = sharedToken ?? store.authToken ?? undefined;
     (async () => {
       const [biz, blocks] = await Promise.all([
-        businessApi.get(businessId).catch(() => null),
-        blockApi.list(businessId).catch(() => [] as Block[]),
+        businessApi.get(businessId, ownerToken).catch(() => null),
+        blockApi.list(businessId, ownerToken).catch(() => [] as Block[]),
       ]);
       if (cancelled) return;
       if (biz) {
