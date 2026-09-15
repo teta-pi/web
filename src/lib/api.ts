@@ -392,7 +392,9 @@ export const businessApi = {
   list: (token: string): Promise<Business[]> =>
     request("/businesses", {}, token),
 
-  get: (id: string): Promise<Business> => request(`/businesses/${id}`),
+  // Token optional: since api S-17 a private/unpublished entity 404s for
+  // anyone but its owner, so the owner's /profile must identify itself.
+  get: (id: string, token?: string): Promise<Business> => request(`/businesses/${id}`, {}, token),
 
   update: (
     id: string,
@@ -505,8 +507,10 @@ export const blockApi = {
   reorder: (blockIds: string[], token?: string): Promise<void> =>
     request("/blocks/reorder", { method: "PATCH", body: JSON.stringify({ block_ids: blockIds }) }, token),
 
-  list: (businessId: string): Promise<Block[]> =>
-    request(`/businesses/${businessId}/blocks`),
+  // Token optional: anonymous callers get public blocks of public entities
+  // only (S-8/S-17); the owner passes a token to see everything on /profile.
+  list: (businessId: string, token?: string): Promise<Block[]> =>
+    request(`/businesses/${businessId}/blocks`, {}, token),
 };
 
 export const devices = {
