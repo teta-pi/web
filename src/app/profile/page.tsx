@@ -2100,6 +2100,9 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
   const [error, setError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [paired, setPaired] = useState(false);
+  // Live (not yet revoked) devices, for the per-device "Revoke" action (3.25).
+  const [liveDevices, setLiveDevices] = useState<Array<{ id: string; label: string; registered_at: string }>>([]);
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   // Check the shared auth store (populated by /login and /settings) first, so
   // users who already have a session there aren't asked to sign in again —
@@ -2117,7 +2120,26 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
     try {
       const data = await devices.list(authToken);
       setPaired(data.paired);
+      setLiveDevices(data.devices.filter((d) => !d.revoked_at));
     } catch { /* non-critical status check — leave last known state */ }
+  }
+
+  // Kills the device's key on the server (DELETE /devices/{id}); the list is
+  // re-fetched afterwards so what's shown is the server's state, not an
+  // optimistic guess.
+  async function handleRevoke(id: string, label: string) {
+    if (!authToken) { setShowLogin(true); return; }
+    if (!window.confirm(`Revoke "${label}"? It will no longer be able to upload to this profile. This cannot be undone — re-pair the camera to link it again.`)) return;
+    setRevoking(id);
+    setError(null);
+    try {
+      await devices.revoke(id, authToken);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not revoke. Try again.");
+    } finally {
+      setRevoking(null);
+      await refreshPaired();
+    }
   }
   useEffect(() => { refreshPaired(); }, [authToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2149,6 +2171,24 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
             <CheckCircleIcon size={12} /> Camera linked
           </span>
         )}
+        {liveDevices.map((d) => (
+          <span key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#6B6885" }}>
+            <span title={`Paired ${new Date(d.registered_at).toLocaleDateString()}`}>{d.label}</span>
+            <button
+              onClick={() => handleRevoke(d.id, d.label)}
+              disabled={revoking === d.id}
+              title="Revoke this camera's upload key on the server. Use this if the phone is lost or sold."
+              style={{
+                padding: "2px 8px", border: "1px solid rgba(220,60,60,0.35)", borderRadius: 6,
+                background: "transparent", color: "#C0392B", fontSize: 11, fontWeight: 600,
+                cursor: revoking === d.id ? "not-allowed" : "pointer", fontFamily: "inherit",
+                opacity: revoking === d.id ? 0.6 : 1,
+              }}
+            >
+              {revoking === d.id ? "Revoking…" : "Revoke"}
+            </button>
+          </span>
+        ))}
         <button
           onClick={handleConnect}
           disabled={loading}
