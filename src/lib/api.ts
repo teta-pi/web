@@ -42,6 +42,22 @@ function handleUnauthorized() {
   }
 }
 
+// Thrown by request() for any non-2xx. `.message` is the same string callers
+// always got (a string `detail`, or JSON of a structured one), so existing
+// `err instanceof Error` handling is unchanged; `.status` + `.detail` let a
+// caller branch on a specific code — e.g. /claim's 409 with a structured
+// {business_id, slug, claim_url} body, or the opt-out page's 400/403/404.
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+  constructor(status: number, detail: unknown) {
+    super(typeof detail === "string" ? detail : JSON.stringify(detail));
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -57,9 +73,7 @@ async function request<T>(
   if (!res.ok) {
     if (res.status === 401) handleUnauthorized();
     const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(
-      typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail)
-    );
+    throw new ApiError(res.status, error.detail);
   }
   return res.json();
 }
@@ -585,4 +599,45 @@ export const verifyApi = {
 export const publicProfileApi = {
   bySlug: (slug: string): Promise<{ legal_entity: PublicLegalEntity | null } & Record<string, unknown>> =>
     request(`/businesses/by-slug/${slug}/public`),
+};
+
+// Pre-verified-unclaimed profiles (1.11 bulk import, GTM Phase 2).
+//
+// Body of the 409 `POST /businesses` returns when the slug already belongs to
+// a pre_verified_unclaimed row — the signal to switch /claim from "create"
+// to "claim this existing profile".
+export interface PreVerifiedConflict {
+  message: string;
+  business_id: string;
+  slug: string;
+  claim_url: string;
+}
+
+export function preVerifiedConflictOf(err: unknown): PreVerifiedConflict | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const d = err.detail as Partial<PreVerifiedConflict> | undefined;
+  return d && typeof d.business_id === "string" && typeof d.slug === "string"
+    ? (d as PreVerifiedConflict)
+    : null;
+}
+
+export const claimFlowApi = {
+  // Same domain_ownership service + instruction shape as verifyApi.domainStart,
+  // but gated on claim_status instead of ownership (the row's owner is the
+  // system import account). 400 once the row is no longer claimable
+  // (already claimed / opted out), 404 if the id is unknown.
+  domainStart: (id: string, domain: string, token: string): Promise<DomainVerifyInstructions> =>
+    request(`/businesses/${id}/claim/domain/start`, { method: "POST", body: JSON.stringify({ domain }) }, token),
+
+  // On a successful check the backend rewrites owner_id to the caller and
+  // sets claim_status=claimed in the same transaction.
+  domainCheck: (id: string, domain: string, token: string): Promise<{ verified: boolean; domain?: string; method?: string; claim_status?: string }> =>
+    request(`/businesses/${id}/claim/domain/check`, { method: "POST", body: JSON.stringify({ domain }) }, token),
+
+  // Unauthenticated one-click opt-out (guardrail: no form, no login). The id
+  // comes from publicProfileApi.bySlug — the backend takes an id, the link in
+  // the outreach mail carries a slug. 403 bad token · 400 not eligible (already
+  // opted out or claimed) · 404 unknown id.
+  optOut: (id: string, token: string): Promise<{ status: string }> =>
+    request(`/businesses/${id}/opt-out?token=${encodeURIComponent(token)}`, { method: "POST" }),
 };

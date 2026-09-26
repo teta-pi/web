@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import QRCode from "react-qr-code";
 import {
   SpinnerIcon,
@@ -11,8 +12,12 @@ import {
 } from "@/components/ui/VerificationIcon";
 import { useOnboardingStore } from "@/stores/useOnboardingStore";
 import { type EntityKind, entityTypeForKind, isPersonKind } from "@/lib/types";
-import { searchApi, authApi, businessApi, claimApi, devices } from "@/lib/api";
+import {
+  searchApi, authApi, businessApi, claimApi, claimFlowApi, devices,
+  preVerifiedConflictOf, publicProfileApi,
+} from "@/lib/api";
 import { useAuthStore } from "@/stores/useAuthStore";
+import DomainProofPanel from "@/components/DomainProofPanel";
 import {
   GR_INK, GR_BODY, GR_MUTED, GR_PRIMARY, GR_PRIMARY_HOVER,
   GR_TINT, GR_LILAC, GR_ORANGE, GR_BORDER, GR_RAISED, GR_MONO_FONT,
@@ -132,11 +137,23 @@ const SUB_KINDS: Record<TopKind, Array<{ kind: EntityKind; label: string; hint: 
 };
 
 /* ══════════════════════════════════════════════════════ */
+// useSearchParams needs a Suspense boundary above it for the static build
+// (same shape as /search).
 export default function ClaimPage() {
+  return (
+    <Suspense fallback={null}>
+      <ClaimWizard />
+    </Suspense>
+  );
+}
+
+function ClaimWizard() {
   const vw = useViewport();
   const m = vw < 640;
   const store = useOnboardingStore();
+  const searchParams = useSearchParams();
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const creatingRef = useRef(false);
 
   const [topKind, setTopKind] = useState<TopKind | null>(null);
   const [emailInput, setEmailInput] = useState("");
@@ -153,8 +170,57 @@ export default function ClaimPage() {
   const [camError, setCamError] = useState("");
 
   const isPerson = isPersonKind(store.entityKind);
+  // True once the domain check moved the pre-verified row to this account —
+  // step 4 then reads "claimed", not "created".
+  const claimed = !!store.claimConflict && store.createdEntityId === store.claimConflict.businessId;
 
   useEffect(() => { if (store.step !== 1) setNameCheck("idle"); }, [store.step]);
+
+  // Claim screen reached but creation went through as a plain 201 (the row
+  // stopped being pre-verified in between): nothing to claim, it's created.
+  useEffect(() => {
+    if (store.step === 5 && store.createdEntityId && !store.claimConflict) store.setStep(4);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.step, store.createdEntityId, store.claimConflict]);
+
+  // /e/[slug]'s "Is this you? Claim this profile" CTA lands here as
+  // `/claim?claim=<slug>` (3.24). Name/kind come from the public payload, not
+  // the URL. With the payload's `id` (api PR #32) the conflict is set right
+  // here and POST /businesses is never called — nothing can be duplicated.
+  // Against an older API without `id`, the POST below reproduces the exact
+  // slug and the backend's own 409 (1.11) supplies the business_id instead.
+  // Either way it's the same step-5 screen as the organic 409 path. A
+  // session already signed in skips the email step.
+  const claimParam = searchParams.get("claim");
+  useEffect(() => {
+    if (!claimParam) return;
+    let cancelled = false;
+    store.reset();
+    store.setClaimingSlug(claimParam);
+    publicProfileApi.bySlug(claimParam)
+      .then((p) => {
+        if (cancelled) return;
+        if (!p.pre_verified_unclaimed) { setCreateError("This profile has already been claimed or isn't open for claiming."); return; }
+        const kind: EntityKind = p.entity_type === "organization" ? "organization" : p.entity_type === "person" ? "other" : "business";
+        const name = String(p.name ?? "");
+        store.setEntityKind(kind);
+        store.setQuery(name);
+        store.setEntity({ name, iso: typeof p.country === "string" ? p.country : "" });
+        if (typeof p.id === "string") store.setClaimConflict({ businessId: p.id, slug: claimParam, name });
+        const existing = useAuthStore.getState();
+        if (existing.token) {
+          store.setToken(existing.token);
+          store.setAccountEmail(existing.user?.email ?? "");
+          store.setAuthed(true);
+          store.setStep(5);
+        } else {
+          store.setStep(2);
+        }
+      })
+      .catch(() => { if (!cancelled) setCreateError("This profile isn't public any more — it may have been claimed or opted out."); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claimParam]);
 
   // Each step is a fresh screen — start it scrolled to the top instead of
   // wherever the previous step left off (otherwise the progress rail can
@@ -181,17 +247,32 @@ export default function ClaimPage() {
   // required — POST /businesses takes any name and returns registry_status=unverified
   // (docs/api.md, docs/verification-rework.md §1). Registry, business-email and
   // domain proofs are optional methods the owner picks later on /profile.
+  //
+  // A 409 is not an error here: the slug belongs to a pre-verified-unclaimed
+  // row (1.11) and the body carries its id — switch to the claim branch
+  // (step 5) instead of surfacing the generic failure. Re-runs when the name
+  // changes so "Not you? Use a different name" can try again while signed in.
   useEffect(() => {
-    if (!store.authed || !store.token || !store.entity || store.createdEntityId) return;
+    if (!store.authed || !store.token || !store.entity || store.createdEntityId || store.claimConflict || creatingRef.current) return;
     const entityType = entityTypeForKind(store.entityKind);
+    const name = store.entity.name;
+    creatingRef.current = true;
     setCreating(true); setCreateError("");
     businessApi
-      .create(store.entity.name, undefined, store.entity.iso || undefined, store.token, entityType)
+      .create(name, undefined, store.entity.iso || undefined, store.token, entityType)
       .then((biz) => store.setCreatedEntityId(String(biz.id)))
-      .catch(() => setCreateError("Could not save your profile — you can retry from your dashboard."))
-      .finally(() => setCreating(false));
+      .catch((err) => {
+        const conflict = preVerifiedConflictOf(err);
+        if (conflict) {
+          store.setClaimConflict({ businessId: conflict.business_id, slug: conflict.slug, name });
+          store.setStep(5);
+          return;
+        }
+        setCreateError("Could not save your profile — you can retry from your dashboard.");
+      })
+      .finally(() => { creatingRef.current = false; setCreating(false); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.authed, store.token]);
+  }, [store.authed, store.token, store.entity?.name]);
 
   // Name availability is advisory. It never blocks a business: two entities can
   // legitimately share a brand name (Google the brand vs Alphabet Inc. the legal
@@ -387,7 +468,7 @@ export default function ClaimPage() {
           {/* Back — hidden once the account exists; there is nothing to go back to */}
           {!store.authed && (
             <div
-              onClick={() => store.setStep((store.step - 1) as 0 | 1 | 2 | 3 | 4)}
+              onClick={() => store.setStep((store.step - 1) as 0 | 1 | 2)}
               style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer", marginBottom: 32, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               ← Back
@@ -458,8 +539,12 @@ export default function ClaimPage() {
                 disabled={!store.query.trim() || nameCheck === "checking" || (isPerson && nameCheck === "taken")}
                 onClick={() => {
                   if (!store.query.trim()) return;
+                  // A hand-typed name is a fresh create, whatever the wizard
+                  // was opened for — drop any /e/[slug] prefill so a 201 here
+                  // doesn't strand the user on the claim screen.
+                  store.setClaimingSlug(null); store.setClaimConflict(null);
                   store.setEntity({ name: store.query.trim(), iso: "" });
-                  store.setStep(2);
+                  store.setStep(store.authed ? 3 : 2);
                 }}
               >
                 Continue →
@@ -472,8 +557,9 @@ export default function ClaimPage() {
             <div style={{ maxWidth: 420 }}>
               <div style={{ fontSize: m ? 26 : 32, fontWeight: 600, letterSpacing: "-0.8px", marginBottom: 8 }}>Verify your email.</div>
               <div style={{ fontSize: 15, color: GR_BODY, marginBottom: 28, lineHeight: 1.5 }}>
-                We&apos;ll send a code to confirm you&apos;re real. This is your account — and your
-                page goes live as soon as it&apos;s confirmed.
+                {store.claimingSlug
+                  ? <>We&apos;ll send a code to confirm you&apos;re real. This is your account — next you&apos;ll prove you control {store.entity.name}&apos;s domain, and the profile becomes yours.</>
+                  : <>We&apos;ll send a code to confirm you&apos;re real. This is your account — and your page goes live as soon as it&apos;s confirmed.</>}
               </div>
 
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 0, border: `1px solid ${GR_BORDER}`, background: GR_TINT, marginBottom: 28, fontSize: 14, fontWeight: 600, color: GR_INK }}>
@@ -569,7 +655,7 @@ export default function ClaimPage() {
                           const res = await authApi.verifyCode(emailInput.trim(), emailCode);
                           store.setToken(res.access_token);
                           useAuthStore.getState().setAuth(res.access_token, { email: emailInput.trim() } as never);
-                          store.setAuthed(true); store.setStep(3);
+                          store.setAuthed(true); store.setStep(store.claimingSlug ? 5 : 3);
                         } catch (err) {
                           const msg = err instanceof Error ? err.message : "";
                           setEmailError(
@@ -588,9 +674,11 @@ export default function ClaimPage() {
                   </span>
                 </>
               )}
-              <div style={{ marginTop: 20 }}>
-                <span onClick={() => store.setStep(1)} style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}>← Change name</span>
-              </div>
+              {!store.claimingSlug && (
+                <div style={{ marginTop: 20 }}>
+                  <span onClick={() => store.setStep(1)} style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}>← Change name</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -662,6 +750,80 @@ export default function ClaimPage() {
     );
   }
 
+  /* ── Step 5: Claim an existing pre-verified profile (3.24) ──
+     Reached from a 409 on POST /businesses — organically (someone types a
+     name TETA+PI already imported from public data) or via /e/[slug]'s CTA.
+     Same domain-proof pattern as /profile's Domain method, but against
+     /claim/domain/* which transfers owner_id on success. ── */
+  if (store.step === 5) {
+    const c = store.claimConflict;
+    const name = c?.name ?? store.entity?.name ?? "this profile";
+    return (
+      <PageShell m={m}>
+        <div style={{ maxWidth: 600, margin: "0 auto", padding: m ? "80px 20px 60px" : "80px 40px 80px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22 }}>
+            <span style={{ width: 10, height: 10, border: `1.5px dashed ${GR_MUTED}`, flexShrink: 0 }} />
+            <span style={{ fontFamily: GR_MONO_FONT, fontSize: 11, fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", color: GR_MUTED }}>
+              Pre-verified · Unclaimed
+            </span>
+          </div>
+
+          <div style={{ fontSize: m ? 26 : 32, fontWeight: 600, letterSpacing: "-0.7px", lineHeight: 1.12, marginBottom: 10 }}>
+            A profile for {name} already exists.
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 300, lineHeight: 1.55, color: GR_BODY, marginBottom: 28 }}>
+            TETA+PI compiled it from public data — GitHub org, domain, npm package — and it isn&apos;t
+            confirmed by an owner yet. Prove you control {name}&apos;s domain and the profile becomes
+            yours: no duplicate, no waiting.
+          </div>
+
+          {!c ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: GR_MUTED, fontSize: 13.5, marginBottom: 20 }}>
+              {createError
+                ? <span style={{ color: GR_ORANGE }}>{createError}</span>
+                : <><SpinnerIcon size={14} /> Looking up the existing profile…</>}
+            </div>
+          ) : (
+            <div style={{
+              border: `1px solid ${GR_BORDER}`, borderLeft: `3px solid ${GR_LILAC}`, borderRadius: 0,
+              background: GR_RAISED, padding: m ? "18px 16px" : "20px 22px", marginBottom: 24,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: GR_INK, letterSpacing: "-0.2px" }}>{name}</span>
+                <Link href={`/e/${c.slug}`} target="_blank" rel="noopener" style={{ fontFamily: GR_MONO_FONT, fontSize: 11, color: GR_PRIMARY, textDecoration: "none" }}>
+                  tetapi.dev/{c.slug} ↗
+                </Link>
+              </div>
+              <div style={{ fontFamily: GR_MONO_FONT, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", color: GR_MUTED, marginBottom: 10 }}>
+                Domain ownership
+              </div>
+              <DomainProofPanel
+                mobile={m}
+                start={(domain) => claimFlowApi.domainStart(c.businessId, domain, store.token ?? "")}
+                check={(domain) => claimFlowApi.domainCheck(c.businessId, domain, store.token ?? "")}
+                onVerified={() => { store.setCreatedEntityId(c.businessId); store.setStep(4); }}
+              />
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
+            <span
+              onClick={() => { store.setClaimConflict(null); store.setClaimingSlug(null); setCreateError(""); store.setStep(1); }}
+              style={{ fontSize: 13, color: GR_MUTED, cursor: "pointer" }}
+            >
+              Not you? Use a different name
+            </span>
+            {store.claimingSlug && (
+              <Link href={`/e/${store.claimingSlug}`} style={{ fontSize: 13, color: GR_MUTED, textDecoration: "none" }}>
+                ← Back to the profile
+              </Link>
+            )}
+          </div>
+        </div>
+      </PageShell>
+    );
+  }
+
   /* ── Step 4: Success ── */
   if (store.step === 4) {
     return (
@@ -674,10 +836,12 @@ export default function ClaimPage() {
           <CheckCircleIcon size={46} color={GR_PRIMARY} />
 
           <div style={{ fontSize: m ? 36 : 48, fontWeight: 600, letterSpacing: "-1px", lineHeight: 1.05, marginTop: 24, marginBottom: 10 }}>
-            You&apos;re live.
+            {claimed ? "Profile claimed." : <>You&apos;re live.</>}
           </div>
           <div style={{ fontSize: 16, fontWeight: 300, lineHeight: 1.6, color: GR_BODY, maxWidth: 440, marginBottom: 30 }}>
-            {store.entity?.name ?? "Your identity"} is now on TETA+PI.
+            {claimed
+              ? <>{store.entity?.name ?? "This profile"} is yours on TETA+PI — the pre-verified snapshot now carries your domain proof.</>
+              : <>{store.entity?.name ?? "Your identity"} is now on TETA+PI.</>}
           </div>
 
           {/* Summary card */}
@@ -695,13 +859,13 @@ export default function ClaimPage() {
                 {store.entity?.name ?? "Your identity"}
               </span>
               <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, letterSpacing: "1.1px", textTransform: "uppercase", color: GR_MUTED }}>
-                Email Verified
+                {claimed ? "Claimed · Domain Verified" : "Email Verified"}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10, fontSize: 12, color: GR_MUTED }}>
               <span>{store.accountEmail || "—"}</span>
               {creating && <><span style={{ color: GR_LILAC }}>·</span><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><SpinnerIcon size={11} /> Saving profile…</span></>}
-              {store.createdEntityId && <><span style={{ color: GR_LILAC }}>·</span><span style={{ color: "#22B07D" }}>✓ Profile saved</span></>}
+              {store.createdEntityId && <><span style={{ color: GR_LILAC }}>·</span><span style={{ color: "#22B07D" }}>{claimed ? "✓ Ownership transferred" : "✓ Profile saved"}</span></>}
               {store.paired && <><span style={{ color: GR_LILAC }}>·</span><span style={{ color: GR_PRIMARY }}>✓ PI Camera linked</span></>}
             </div>
             {createError && <div style={{ marginTop: 10, fontSize: 12.5, color: GR_ORANGE }}>{createError}</div>}
@@ -719,13 +883,15 @@ export default function ClaimPage() {
           }}>
             <span style={{ color: GR_MUTED }}>● Email Verified</span>
             <span style={{ color: GR_LILAC }}>→</span>
-            <span style={{ color: GR_MUTED }}>○ {isPerson ? "Registry / C2PA Media" : "Registry / Domain"}</span>
+            <span style={{ color: GR_MUTED }}>{claimed ? "● Domain" : `○ ${isPerson ? "Registry / C2PA Media" : "Registry / Domain"}`}</span>
             <span style={{ color: GR_LILAC }}>→</span>
             <span style={{ color: GR_MUTED }}>○ Full</span>
           </div>
 
           <div style={{ fontSize: 14, color: GR_BODY, maxWidth: 380, lineHeight: 1.55, marginBottom: 28 }}>
-            {isPerson
+            {claimed
+              ? "Add more proof from your profile — official registry match, business email, or C2PA-signed media — and replace the public-data snapshot with your own statements."
+              : isPerson
               ? "Add proof from your profile — official registry match, domain ownership, or C2PA-signed media via PI Camera — to raise your trust level."
               : "Add proof from your profile — official registry match, domain ownership, or business email — to raise your trust level."}
           </div>
