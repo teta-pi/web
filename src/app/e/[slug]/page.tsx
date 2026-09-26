@@ -179,7 +179,6 @@ function AttestationBar({ profile, mobile: m }: { profile: PublicProfile; mobile
 // under AttestationBar so a visitor can't miss it before reading the rest
 // of the (real, attested) page content. =====
 function PreVerifiedBanner({ profile, mobile: m }: { profile: PublicProfile; mobile: boolean }) {
-  const [showInfo, setShowInfo] = useState(false);
   if (!profile.pre_verified_unclaimed) return null;
 
   return (
@@ -199,20 +198,22 @@ function PreVerifiedBanner({ profile, mobile: m }: { profile: PublicProfile; mob
       <span style={{ fontSize: 13, color: GR_BODY, lineHeight: 1.5, ...(m ? { width: "100%" } : { flex: "1 1 280px" }) }}>
         Public data snapshot compiled by TETA+PI — not self-reported, and not yet confirmed by an owner.
       </span>
-      <span
-        onClick={() => setShowInfo((v) => !v)}
+      {/* 3.24: real entry into the claim flow — /claim prefills name/kind
+          from this same public payload and drops into its domain-ownership
+          step (the one the 409 on POST /businesses also leads to), so both
+          entry points share one screen. */}
+      <Link
+        href={`/claim?claim=${encodeURIComponent(profile.slug)}`}
         style={{
           fontFamily: GR_MONO_FONT, fontSize: 11.5, fontWeight: 600, color: GR_PRIMARY,
-          border: `1px solid ${GR_LILAC}`, padding: "7px 14px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap",
+          border: `1px solid ${GR_LILAC}`, padding: "7px 14px", flexShrink: 0, whiteSpace: "nowrap", textDecoration: "none",
         }}
       >
         Is this you? Claim this profile
-      </span>
-      {showInfo && (
-        <div style={{ width: "100%", fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_MUTED, lineHeight: 1.5 }}>
-          Domain-ownership claim flow — coming soon. Once live, confirming a DNS TXT record on {profile.name}&rsquo;s domain will move this profile to &ldquo;claimed&rdquo;.
-        </div>
-      )}
+      </Link>
+      <div style={{ width: "100%", fontFamily: GR_MONO_FONT, fontSize: 10.5, color: GR_MUTED, lineHeight: 1.5 }}>
+        Claiming = proving control of {profile.name}&rsquo;s domain (DNS TXT or a well-known file). Takes a minute; moves this profile to &ldquo;claimed&rdquo; under your account.
+      </div>
     </div>
   );
 }
