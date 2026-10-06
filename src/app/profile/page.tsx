@@ -2027,7 +2027,7 @@ function MediaDisplay({
             }}
           >
             <CameraIcon size={12} />
-            PI Camera · C2PA
+            Uploaded from a paired device
           </div>
         )}
       </div>
@@ -2192,7 +2192,7 @@ function PiCamButton({ businessId, entityName }: { businessId: string | null; en
         <button
           onClick={handleConnect}
           disabled={loading}
-          title="Scan a QR in the Pi CAM app to link your camera — captures are C2PA-signed and uploaded straight into a block."
+          title="Scan a QR in the Pi CAM app to link your camera — captures upload straight into a block."
           style={{
             display: "flex", alignItems: "center", gap: 7,
             padding: "7px 14px",

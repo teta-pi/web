@@ -30,8 +30,15 @@ export interface MediaItem {
   type: "video" | "photo" | "file";
   storage_url: string;
   original_hash: string | null;
+  // Gated server-side on c2pa_verification_enabled (api docs/security.md
+  // S-26) — stays false until real C2PA manifest verification exists, since
+  // today's check is a substring match on client-supplied input and proves
+  // nothing. Do not render this as a trust claim.
   c2pa_verified: boolean;
   c2pa_signer: string | null;
+  // Fact, not a trust claim: this media arrived through a paired device's
+  // upload endpoint ("Pi CAM Captures" block). Independent of c2pa_verified.
+  device_upload?: boolean;
   bitcoin_confirmed: boolean;
   bitcoin_block: number | null;
   uploaded_at: string;

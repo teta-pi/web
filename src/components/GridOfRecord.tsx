@@ -35,7 +35,11 @@ export function mapServerBlock(b: Block): ProfileBlock {
     createdAt: b.created_at,
     media: media
       ? {
-          source: media.c2pa_verified ? "pi_camera" : "file",
+          // "pi_camera" is a source-of-upload fact (device_upload), not a
+          // trust claim — do not derive it from c2pa_verified, which is
+          // gated separately and stays false until real C2PA verification
+          // exists (known-issues §6.8, security.md S-26).
+          source: media.device_upload ? "pi_camera" : "file",
           phase: "done",
           id: media.id,
           storage_url: media.storage_url,
