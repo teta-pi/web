@@ -54,18 +54,36 @@ export function mapServerBlock(b: Block): ProfileBlock {
   };
 }
 
-// The real data model has no "audio" media type (MediaItem.type is video|
-// photo|file only) and no per-block registry association — both spec
-// concepts don't map onto real data (documented in 3.15b, see
+// There's no "audio" media type and no per-block registry association —
+// both spec concepts don't map onto real data (documented in 3.15b, see
 // docs/known-issues.md), so KIND drops audio and a tile's seal maxes out at
 // c2pa+btc, never registry.
 export type LedgerKind = "VIDEO" | "PHOTO" | "TEXT" | "FILE";
 
-export function blockKind(block: ProfileBlock): LedgerKind {
-  if (!block.media) return "TEXT";
-  if (block.media.type === "video") return "VIDEO";
-  if (block.media.type === "photo") return "PHOTO";
+// `media.type` is a free-form string in the API, not an enum, and two
+// different vocabularies live in it (known-issues §6.8): the spec's own
+// "video|photo|file" (what MediaItem used to be typed as, 1 legacy row in
+// prod) and the MIME top-level family that both live write paths actually
+// produce today — POST /media/upload stores the client's `type` form field
+// verbatim, which the web app fills with `file.type.split("/")[0]`, and
+// /media/device-upload derives `mime_type.split("/")[0]` server-side. So
+// real photos arrive as "image", PDFs as "application", .txt as "text".
+// Normalise here, in one place, rather than comparing the raw string at
+// each render site — historical rows are never rewritten, so both
+// vocabularies have to keep rendering. A full MIME type is tolerated too
+// ("image/jpeg"), since nothing server-side constrains what can be stored.
+export function mediaKind(rawType: string | null | undefined): LedgerKind {
+  const family = (rawType ?? "").toLowerCase().split("/")[0].trim();
+  if (family === "video") return "VIDEO";
+  if (family === "image" || family === "photo") return "PHOTO";
   return "FILE";
+}
+
+export function blockKind(block: ProfileBlock): LedgerKind {
+  // TEXT is "block with no media at all" — a media row whose own type is
+  // "text" (an uploaded .txt) is a file, and renders as FILE.
+  if (!block.media) return "TEXT";
+  return mediaKind(block.media.type);
 }
 
 export function blockMarks(block: ProfileBlock): Array<"c2pa" | "btc"> {

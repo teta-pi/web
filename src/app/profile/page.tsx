@@ -1829,7 +1829,13 @@ function BlockEditPanel({
 
       try {
         const { mediaApi } = await import("@/lib/api");
-        const result = await mediaApi.upload(block.id, file, file.type.split("/")[0] || "image", token);
+        // The MIME top-level family is what the server stores verbatim in
+        // media.type, so this call is where "image"/"video"/"application"
+        // rows come from (see mediaKind() in GridOfRecord). A browser that
+        // reports no MIME type must fall back to "file", not "image" — an
+        // unknown upload isn't a photo, and claiming it is renders a PHOTO
+        // tile with a broken image behind it.
+        const result = await mediaApi.upload(block.id, file, file.type.split("/")[0] || "file", token);
         // mediaApi.upload's own response doesn't carry storage_url/original_hash
         // (dropped by the API's response_model) — re-fetch the block via the
         // permalink endpoint to read back the real MediaOut the server wrote.

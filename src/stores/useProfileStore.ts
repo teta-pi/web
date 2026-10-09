@@ -17,10 +17,11 @@ export interface BlockMedia {
   c2pa_verified?: boolean;
   bitcoin_confirmed?: boolean;
   bitcoin_block?: number | null;
-  // The server's actual media kind (video/photo/file) — distinct from `source`
-  // above, which is the upload *mechanism*, not the content type. Drives the
-  // square ledger's per-tile KIND label and filter chips (3.15b).
-  type?: "video" | "photo" | "file";
+  // The server's actual media kind — distinct from `source` above, which is
+  // the upload *mechanism*, not the content type. Drives the square ledger's
+  // per-tile KIND label and filter chips (3.15b). Raw, free-form server
+  // string carrying two vocabularies: normalise via mediaKind().
+  type?: string;
   uploaded_at?: string;
 }
 
