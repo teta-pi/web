@@ -27,7 +27,12 @@ export interface RegistryData {
 
 export interface MediaItem {
   id: string;
-  type: "video" | "photo" | "file";
+  // Free-form on the server (String(20), no enum) and written by two paths
+  // with two different vocabularies — "image"/"video"/"application"/"text"
+  // (MIME family, what's produced today) and the spec's legacy "photo".
+  // Never compare this literal: normalise through mediaKind() in
+  // components/GridOfRecord.tsx. See known-issues §6.8.
+  type: string;
   storage_url: string;
   original_hash: string | null;
   // Gated server-side on c2pa_verification_enabled (api docs/security.md

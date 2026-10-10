@@ -15,7 +15,7 @@ function useViewport() {
   return vw;
 }
 import { useRouter, useSearchParams } from "next/navigation";
-import { searchApi, blockApi } from "@/lib/api";
+import { searchApi, blockApi, mediaUrl } from "@/lib/api";
 import type { SearchResult } from "@/lib/types";
 import { ENTITY_TYPE_LABEL } from "@/lib/types";
 import AppHeader, { APP_HEADER_H } from "@/components/AppHeader";
@@ -104,10 +104,16 @@ function buildRow(result: SearchResult, rawBlocks: ProfileBlock[]): ResultRowDat
 // ===== Evidence tile — StatementTile (3.15b), one size down, per spec =====
 function EvidenceTile({ block, onOpen, mobile = false }: { block: ProfileBlock; onOpen: () => void; mobile?: boolean }) {
   const [hover, setHover] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const kind = blockKind(block);
   const marks = blockMarks(block);
   const dark = kind === "VIDEO";
   const mediaLabel = blockMediaLabel(kind);
+  // These tiles showed the stripe placeholder for every kind, including real
+  // photos — same real-media rule as the profile ledger tile and the shared
+  // block modal (known-issues §6.8).
+  const resolvedUrl = block.media?.storage_url ? mediaUrl(block.media.storage_url) : null;
+  const showRealImage = kind === "PHOTO" && !!resolvedUrl && !imgError;
 
   // Mobile variant collapses the header row into the media area (kind +
   // marks pinned top, no separate meta-bearing header bar) per the design's
@@ -119,9 +125,18 @@ function EvidenceTile({ block, onOpen, mobile = false }: { block: ProfileBlock; 
         onClick={onOpen}
         style={{ aspectRatio: "1", border: `1px solid ${GR_BORDER}`, background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", overflow: "hidden" }}
       >
-        <div style={{ flex: 1, minHeight: 0, background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: 8 }}>
-          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9, color: dark ? GR_LILAC : GR_MUTED }}>{kind}</span>
-          <span style={{ display: "flex", gap: 3 }}>
+        <div style={{ flex: 1, minHeight: 0, position: "relative", background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: 8 }}>
+          {showRealImage && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={resolvedUrl!}
+              alt=""
+              onError={() => setImgError(true)}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          )}
+          <span style={{ position: "relative", fontFamily: GR_MONO_FONT, fontSize: 9, color: showRealImage ? "#fff" : dark ? GR_LILAC : GR_MUTED, textShadow: showRealImage ? "0 1px 3px rgba(26,16,53,0.75)" : undefined }}>{kind}</span>
+          <span style={{ position: "relative", display: "flex", gap: 3 }}>
             {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={6} />)}
           </span>
         </div>
@@ -148,8 +163,18 @@ function EvidenceTile({ block, onOpen, mobile = false }: { block: ProfileBlock; 
           {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={7} />)}
         </span>
       </div>
-      <div style={{ flex: 1, minHeight: 0, background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: dark ? GR_LILAC : GR_MUTED }}>{mediaLabel}</span>
+      <div style={{ flex: 1, minHeight: 0, background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+        {showRealImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolvedUrl!}
+            alt=""
+            onError={() => setImgError(true)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 9.5, color: dark ? GR_LILAC : GR_MUTED }}>{mediaLabel}</span>
+        )}
       </div>
       <div style={{ padding: "10px 11px 11px", borderTop: "1px solid #F1EDF9", flexShrink: 0 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.3, color: GR_INK }}>{block.title || "Untitled block"}</div>

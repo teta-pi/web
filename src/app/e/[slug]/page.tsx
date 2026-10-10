@@ -7,8 +7,9 @@ import AppHeader, { APP_HEADER_H } from "@/components/AppHeader";
 import {
   GR_INK, GR_BODY, GR_MUTED, GR_PRIMARY, GR_LILAC, GR_ORANGE,
   GR_BORDER, GR_RAISED, GR_MONO_FONT, GR_STRIPE, GR_INKSTRIPE,
-  blockMediaLabel, formatTileDate, SealGlyph, type LedgerKind, type SealKind,
+  blockMediaLabel, formatTileDate, SealGlyph, mediaKind, type LedgerKind, type SealKind,
 } from "@/components/GridOfRecord";
+import { mediaUrl } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -53,7 +54,10 @@ interface PublicProfile {
   blocks: {
     title: string;
     description: string | null;
-    media: { type: string; c2pa_verified: boolean; captured_at: string | null; bitcoin_confirmed: boolean; bitcoin_block: number | null }[];
+    // media_url is the public payload's own name for storage_url — it was
+    // returned all along but went undeclared here, which is half of why no
+    // photo ever rendered on this page (known-issues §6.8).
+    media: { type: string; media_url: string | null; c2pa_verified: boolean; captured_at: string | null; bitcoin_confirmed: boolean; bitcoin_block: number | null }[];
   }[];
   created_at: string;
 }
@@ -80,9 +84,7 @@ function yearOf(dateLike: string | null | undefined): string {
 function blockKindOf(block: PublicBlock): LedgerKind {
   const media = block.media[0];
   if (!media) return "TEXT";
-  if (media.type === "video") return "VIDEO";
-  if (media.type === "photo") return "PHOTO";
-  return "FILE";
+  return mediaKind(media.type);
 }
 
 function blockMarksOf(block: PublicBlock): Array<"c2pa" | "btc"> {
@@ -339,11 +341,17 @@ function FactsStrip({ profile, mobile: m }: { profile: PublicProfile; mobile: bo
 // owner's ledger — descriptions here have no hover/modal to expand into, so
 // tile height flexes to fit the real text instead of clipping it. =====
 function StatementTilePublic({ block, index, mobile: m }: { block: PublicBlock; index: number; mobile: boolean }) {
+  const [imgError, setImgError] = useState(false);
   const kind = blockKindOf(block);
   const marks = blockMarksOf(block);
   const dark = kind === "VIDEO";
   const dateLabel = formatTileDate(block.media[0]?.captured_at ?? null);
   const btcBlock = block.media.find((mm) => mm.bitcoin_block)?.bitcoin_block ?? null;
+  // Same rule as the owner's ledger tile and the block modal: a photo shows
+  // the real signed upload when it resolves, video keeps the ink-stripe
+  // treatment, everything else keeps the stripe placeholder.
+  const resolvedUrl = mediaUrl(block.media[0]?.media_url ?? null);
+  const showRealImage = kind === "PHOTO" && !!resolvedUrl && !imgError;
 
   return (
     <div style={{ border: `1px solid ${GR_BORDER}`, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -355,10 +363,26 @@ function StatementTilePublic({ block, index, mobile: m }: { block: PublicBlock; 
           {marks.map((mk) => <SealGlyph key={mk} kind={mk} verified size={8} />)}
         </span>
       </div>
-      <div style={{ padding: "16px 13px", minHeight: m ? 56 : 72, background: dark ? GR_INKSTRIPE : GR_STRIPE, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: dark ? GR_LILAC : GR_MUTED, letterSpacing: "0.6px" }}>
-          {blockMediaLabel(kind)}
-        </span>
+      <div
+        style={{
+          padding: showRealImage ? 0 : "16px 13px", height: showRealImage ? (m ? 150 : 190) : undefined,
+          minHeight: m ? 56 : 72, background: dark ? GR_INKSTRIPE : GR_STRIPE,
+          display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+        }}
+      >
+        {showRealImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolvedUrl!}
+            alt=""
+            onError={() => setImgError(true)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <span style={{ fontFamily: GR_MONO_FONT, fontSize: 10, color: dark ? GR_LILAC : GR_MUTED, letterSpacing: "0.6px" }}>
+            {blockMediaLabel(kind)}
+          </span>
+        )}
       </div>
       <div style={{ padding: "12px 13px 13px", borderTop: "1px solid #F1EDF9" }}>
         <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.3, letterSpacing: "-0.2px", color: GR_INK }}>
