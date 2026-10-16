@@ -20,8 +20,8 @@ anchored on Bitcoin), and get discovered by AI agents through the registry.
 Next.js 15 (App Router) · TypeScript · Tailwind CSS · zustand.
 
 ## Docs
-Canonical docs — architecture, API contracts, coding rules — live in
-[`teta-pi/infra`](https://github.com/teta-pi/infra).
+Canonical docs live in `teta-pi/infra`, our internal infrastructure docs
+repo (private).
 
 ## License
 MIT © 2026 TETA+PI · tetapi.dev
