@@ -34,6 +34,16 @@ jobs:
 
       - name: Sync Next.js standalone
         run: |
+          # --chown=root:root on EVERY rsync: without it, `-a` implies -o -g
+          # and, running as root on the receiver, rsync preserves the runner's
+          # numeric uid/gid (user `runner` = 1001). uid 1001 on the droplet is
+          # co-tenant `hellfire`, so every web deploy chowned
+          # /opt/tetapi/web/web to hellfire:hellfire — and `tetapi-web` runs
+          # `node server.js` from that tree as root, so a co-tenant owned code
+          # this box executes as root (S-19, same trap 5.11 fixed in api).
+          # Forcing root:root keeps the tree owned by root. (rsync >=3.1.0 on
+          # both ends.)
+          #
           # NOTE (5.3 split): pre-split, `next build` ran from the monorepo's
           # web/ subdir, so standalone tracing baked in a nested `web/` folder
           # (matching systemd's WorkingDirectory=/opt/tetapi/web/web). Now that
@@ -43,18 +53,18 @@ jobs:
           ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 \
             "mkdir -p /opt/tetapi/web/web"
 
-          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+          rsync -az --chown=root:root -e "ssh -i ~/.ssh/tetapi_ed25519" \
             --delete --exclude='cache' \
             .next/standalone/ root@164.90.235.66:/opt/tetapi/web/web/
 
           ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 \
             "mkdir -p /opt/tetapi/web/web/.next/static"
 
-          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+          rsync -az --chown=root:root -e "ssh -i ~/.ssh/tetapi_ed25519" \
             --delete \
             .next/static/ root@164.90.235.66:/opt/tetapi/web/web/.next/static/
 
-          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+          rsync -az --chown=root:root -e "ssh -i ~/.ssh/tetapi_ed25519" \
             .next/server/ root@164.90.235.66:/opt/tetapi/web/web/.next/server/
 
       # app-paths-manifest.json is no longer hardcoded here (3.17) — the
